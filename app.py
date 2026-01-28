@@ -1,11 +1,11 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Annotale DB Explorer",
+    page_title="Home",
     layout="wide",
 )
 
-st.title("Annotale DB Explorer")
+st.title("Home")
 st.markdown(
     """
     Explore the `annotale.db` SQLite database with interactive views.
@@ -13,7 +13,7 @@ st.markdown(
     Use the navigation sidebar to move between pages:
     - Overview of tables and schemas
     - Distributions (TALEs, families, RVDs)
-    - Family trees
-    - Strain vs. family cross-tabs
+    - TALE families
+    - Crosstabs (strain/species vs. family)
     """
 )
