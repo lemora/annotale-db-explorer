@@ -183,18 +183,43 @@ pos_counts = query_df(pos_query)
 if pos_counts.empty:
     st.warning("No repeat data available for position plot.")
 else:
+    mode = st.radio(
+        "Plot type",
+        ["Stacked bars", "Grouped bars"],
+        horizontal=True,
+        index=0,
+        key="rvd_pos_plot_type",
+    )
+    stacked = mode == "Stacked bars"
+    limit_default = mode == "Grouped bars"
+    limit_topk = st.checkbox("Limit to top‑K RVDs per position", value=limit_default)
+    default_k = 5 if mode == "Grouped bars" else 7
+    top_k = st.slider("K", 3, 15, default_k, 1, disabled=not limit_topk)
+
+    plot_counts = pos_counts.copy()
+    if limit_topk:
+        plot_counts = (
+            plot_counts.sort_values(["position", "count"], ascending=[True, False])
+            .groupby("position")
+            .head(top_k)
+        )
+
+    legend_selection = alt.selection_point(fields=["rvd"], bind="legend")
     pos_chart = (
-        alt.Chart(pos_counts)
+        alt.Chart(plot_counts)
         .mark_bar()
         .encode(
             x=alt.X(
-                "position:Q",
+                "position:O",
                 title="Repeat position within TALE",
-                scale=alt.Scale(domain=[0, float(pos_counts["position"].max())]),
+                sort="ascending",
             ),
-            y=alt.Y("count:Q", title="RVD count", stack="zero"),
+            xOffset=alt.XOffset("rvd:N") if not stacked else alt.value(0),
+            y=alt.Y("count:Q", title="RVD count", stack="zero" if stacked else None),
             color=alt.Color("rvd:N", title="RVD"),
             tooltip=["position:Q", "rvd:N", "count:Q"],
         )
+        .add_params(legend_selection)
+        .transform_filter(legend_selection)
     )
     st.altair_chart(pos_chart.properties(height=400), use_container_width=True)
