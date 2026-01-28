@@ -1,22 +1,21 @@
 import altair as alt
-import pandas as pd
 import streamlit as st
 
 from db_utils import query_df
 
-st.set_page_config(page_title="Strain vs Family", layout="wide")
+st.set_page_config(page_title="Pathovar/Strain vs. Family", layout="wide")
 
-st.title("Strain vs. Family Cross-Tab")
+st.title("Pathovar/Strain vs. Family Cross-Tab")
 
 view = st.radio(
-    "View",
-    ["Strain vs Family", "Species + Pathovar vs Family"],
+    "",
+    ["Species + Pathovar vs. Family", "Strain vs. Family"],
+    index=0,
     horizontal=True,
+    key="crosstab_view",
 )
 
-col1, col2 = st.columns(2)
-
-if view == "Strain vs Family":
+if view == "Strain vs. Family":
     query = """
     SELECT COALESCE(s.name, 'Unknown') AS strain,
            fm.family_id AS family,
@@ -43,35 +42,37 @@ if raw.empty:
     st.warning("No family/strain data available.")
     st.stop()
 
-raw["strain"] = raw["strain"].str.replace("Xanthomonas", "X", regex=False)
-raw["display_label"] = raw["strain"]
-raw["full_label"] = raw["strain"]
+raw["strain"] = raw["strain"].str.replace("Xanthomonas", "X.", regex=False)
 
 family_totals = raw.groupby("family")["count"].sum().sort_values(ascending=False)
-strain_totals = raw.groupby("display_label")["count"].sum().sort_values(ascending=False)
+strain_totals = raw.groupby("strain")["count"].sum().sort_values(ascending=False)
 
 max_strains = len(strain_totals)
-top_strains = col1.slider(
-    "Top strains (by TALE count)", 5, max(5, max_strains), min(20, max_strains), 5
+if "prev_view" not in st.session_state:
+    st.session_state["prev_view"] = st.session_state["crosstab_view"]
+if st.session_state["crosstab_view"] != st.session_state["prev_view"]:
+    st.session_state["crosstab_show_all"] = False
+    st.session_state["prev_view"] = st.session_state["crosstab_view"]
+
+show_all = st.checkbox("Show all rows", value=False, key="crosstab_show_all")
+top_n = st.slider(
+    "Show top rows (by total TALE count)",
+    5,
+    max(5, max_strains),
+    min(20, max_strains),
+    5,
+    disabled=show_all,
 )
+top_n = max_strains if show_all else top_n
 
 families = family_totals.index.tolist()
-strains = strain_totals.head(top_strains).index.tolist()
+strains = strain_totals.head(top_n).index.tolist()
 
-subset = raw[raw["family"].isin(families) & raw["display_label"].isin(strains)]
+subset = raw[raw["family"].isin(families) & raw["strain"].isin(strains)]
 
-pivot = subset.pivot_table(
-    index="display_label", columns="family", values="count", fill_value=0
-)
+pivot = subset.pivot_table(index="strain", columns="family", values="count", fill_value=0)
 
-long_df = pivot.reset_index().melt(
-    id_vars="display_label", var_name="family", value_name="count"
-)
-long_df = long_df.merge(
-    subset[["display_label", "full_label"]].drop_duplicates(),
-    on="display_label",
-    how="left",
-)
+long_df = pivot.reset_index().melt(id_vars="strain", var_name="family", value_name="count")
 
 chart_height = max(450, 24 * len(strains))
 
@@ -81,12 +82,17 @@ chart = (
     .encode(
         x=alt.X("family:N", title="Family", sort=families, axis=alt.Axis(labelAngle=-45)),
         y=alt.Y(
-            "display_label:N",
-            title=("Species + Pathovar" if view == "Species + Pathovar vs Family" else "Strain"),
+            "strain:N",
+            title=("Species + Pathovar" if view == "Species + Pathovar vs. Family" else "Strain"),
             sort=strains,
+            axis=alt.Axis(labelLimit=1000, labelOverlap=False),
         ),
-        color=alt.Color("count:Q", scale=alt.Scale(scheme="blues")),
-        tooltip=["full_label:N", "family:N", "count:Q"],
+        color=alt.condition(
+            "datum.count == 0",
+            alt.value("#ffffff"),
+            alt.Color("count:Q", scale=alt.Scale(scheme="blues")),
+        ),
+        tooltip=["strain:N", "family:N", "count:Q"],
     )
 )
 
