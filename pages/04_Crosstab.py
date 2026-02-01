@@ -5,6 +5,8 @@ from db_utils import query_df
 
 st.set_page_config(page_title="Pathovar/Strain vs. Family", layout="wide")
 
+st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+
 st.session_state["active_page"] = "Crosstab"
 st.title("Pathovar/Strain vs. Family Cross-Tab")
 

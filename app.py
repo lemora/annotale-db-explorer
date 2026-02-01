@@ -5,6 +5,8 @@ st.set_page_config(
     layout="wide",
 )
 
+st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+
 st.session_state["active_page"] = "Home"
 left, right = st.columns([3, 1], vertical_alignment="top")
 with left:

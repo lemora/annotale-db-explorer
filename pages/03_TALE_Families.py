@@ -8,6 +8,8 @@ from tree_utils import layout_tree, try_parse_newick
 
 st.set_page_config(page_title="TALE Families", layout="wide")
 
+st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+
 st.session_state["active_page"] = "TALE Families"
 st.title("TALE Families")
 

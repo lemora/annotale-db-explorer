@@ -6,6 +6,8 @@ from db_utils import query_df
 
 st.set_page_config(page_title="Taxonomy Comparison", layout="wide")
 
+st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+
 st.session_state["active_page"] = "Taxonomy Comparison"
 st.title("Taxonomy: NCBI vs Legacy")
 st.caption(

@@ -7,6 +7,8 @@ from db_utils import load_sample_taxonomy, query_df
 
 st.set_page_config(page_title="Sample Map", layout="wide")
 
+st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+
 st.title("Sample Locations")
 st.caption("Country-level map; dot size indicates sample count.")
 current_page = "Sample Map"

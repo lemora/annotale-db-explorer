@@ -4,6 +4,8 @@ from db_utils import list_tables, query_df, table_counts, table_schema
 
 st.set_page_config(page_title="DB Overview", layout="wide")
 
+st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+
 st.session_state["active_page"] = "Overview"
 st.title("Database Overview")
 
