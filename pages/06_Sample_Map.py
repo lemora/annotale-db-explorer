@@ -1,0 +1,279 @@
+import altair as alt
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from streamlit_plotly_events import plotly_events
+
+from db_utils import query_df
+
+st.set_page_config(page_title="Sample Map", layout="wide")
+
+st.title("Sample Locations")
+st.caption("Country-level map; dot size indicates sample count.")
+
+raw = query_df(
+    """
+    SELECT s.id AS sample_id,
+           s.legacy_strain_name,
+           s.strain_name,
+           s.geo_tag,
+           s.collection_date,
+           CASE
+             WHEN length(trim(s.collection_date)) = 4
+                  AND trim(s.collection_date) GLOB '[0-9][0-9][0-9][0-9]'
+               THEN CAST(substr(trim(s.collection_date), 1, 4) AS INTEGER)
+             WHEN trim(s.collection_date) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+               THEN CAST(substr(trim(s.collection_date), 1, 4) AS INTEGER)
+             WHEN trim(s.collection_date) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+               THEN CAST(substr(trim(s.collection_date), 1, 4) AS INTEGER)
+             ELSE NULL
+           END AS year
+    FROM samples s
+    """
+)
+
+if raw.empty:
+    st.warning("No sample data available.")
+    st.stop()
+
+
+def parse_country(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    if not cleaned:
+        return None
+    if ":" in cleaned:
+        cleaned = cleaned.split(":", 1)[0].strip()
+    if "," in cleaned:
+        cleaned = cleaned.split(",", 1)[0].strip()
+    return cleaned
+
+
+COUNTRY_CENTROIDS = {
+    "Argentina": (-38.4161, -63.6167),
+    "Australia": (-25.2744, 133.7751),
+    "Belgium": (50.5039, 4.4699),
+    "Benin": (9.3077, 2.3158),
+    "Brazil": (-14.235, -51.9253),
+    "Burkina Faso": (12.2383, -1.5616),
+    "Cameroon": (7.3697, 12.3547),
+    "Canada": (56.1304, -106.3468),
+    "Chile": (-35.6751, -71.543),
+    "China": (35.8617, 104.1954),
+    "Colombia": (4.5709, -74.2973),
+    "France": (46.2276, 2.2137),
+    "India": (20.5937, 78.9629),
+    "Iran": (32.4279, 53.688),
+    "Japan": (36.2048, 138.2529),
+    "Kenya": (-0.0236, 37.9062),
+    "Madagascar": (-18.7669, 46.8691),
+    "Malawi": (-13.2543, 34.3015),
+    "Malaysia": (4.2105, 101.9758),
+    "Mali": (17.5707, -3.9962),
+    "Martinique": (14.6415, -61.0242),
+    "Mauritius": (-20.3484, 57.5522),
+    "Mexico": (23.6345, -102.5528),
+    "Netherlands": (52.1326, 5.2913),
+    "New Zealand": (-40.9006, 174.886),
+    "Niger": (17.6078, 8.0817),
+    "Norway": (60.472, 8.4689),
+    "Pakistan": (30.3753, 69.3451),
+    "Philippines": (12.8797, 121.774),
+    "Puerto Rico": (18.2208, -66.5901),
+    "Reunion": (-21.1151, 55.5364),
+    "Russia": (61.524, 105.3188),
+    "Senegal": (14.4974, -14.4524),
+    "Singapore": (1.3521, 103.8198),
+    "South Africa": (-30.5595, 22.9375),
+    "South Korea": (35.9078, 127.7669),
+    "Spain": (40.4637, -3.7492),
+    "Sudan": (12.8628, 30.2176),
+    "Switzerland": (46.8182, 8.2275),
+    "Taiwan": (23.6978, 120.9605),
+    "Tanzania": (-6.369, 34.8888),
+    "Thailand": (15.87, 100.9925),
+    "Tunisia": (33.8869, 9.5375),
+    "USA": (37.0902, -95.7129),
+    "Uganda": (1.3733, 32.2903),
+    "United Kingdom": (55.3781, -3.436),
+    "Uruguay": (-32.5228, -55.7658),
+}
+
+raw["strain_display"] = raw["strain_name"].fillna(raw["legacy_strain_name"]).fillna(
+    "Unknown"
+)
+raw["country"] = raw["geo_tag"].apply(parse_country)
+
+view_mode = st.radio(
+    "View mode",
+    ["Static", "Cumulative by year"],
+    horizontal=True,
+)
+
+map_placeholder = st.container()
+cutoff_year = None
+if view_mode == "Cumulative by year":
+    valid_years = raw["year"].dropna().astype(int)
+    if valid_years.empty:
+        st.info("No usable collection years found; showing static view instead.")
+        view_mode = "Static"
+    else:
+        cutoff_year = st.slider(
+            "Show samples up to year",
+            min_value=int(valid_years.min()),
+            max_value=int(valid_years.max()),
+            value=int(valid_years.max()),
+        )
+
+filtered = raw.copy()
+if view_mode == "Cumulative by year":
+    if cutoff_year is not None:
+        filtered = filtered[filtered["year"].notna() & (filtered["year"] <= cutoff_year)]
+    else:
+        filtered = filtered[filtered["year"].notna()]
+
+missing_country = filtered[filtered["country"].isna() | (filtered["country"] == "")]
+located = filtered[filtered["country"].notna() & (filtered["country"] != "")]
+
+counts = (
+    located.groupby("country")
+    .size()
+    .reset_index(name="count")
+    .sort_values("count", ascending=False)
+)
+counts["lat"] = counts["country"].map(
+    lambda c: COUNTRY_CENTROIDS.get(c, (None, None))[0]
+)
+counts["lon"] = counts["country"].map(
+    lambda c: COUNTRY_CENTROIDS.get(c, (None, None))[1]
+)
+
+mappable = counts.dropna(subset=["lat", "lon"]).copy()
+
+if mappable.empty:
+    st.info("No mappable locations found for the current filters.")
+    selected_rows = located
+else:
+    mappable["lat"] = mappable["lat"].astype(float)
+    mappable["lon"] = mappable["lon"].astype(float)
+    mappable["count"] = mappable["count"].astype(float)
+    counts_max = float(mappable["count"].max())
+    sizes = (mappable["count"] / counts_max * 24 + 6).tolist()
+    fig = go.Figure(
+        data=go.Scattergeo(
+            lat=mappable["lat"].tolist(),
+            lon=mappable["lon"].tolist(),
+            text=mappable["country"].tolist(),
+            customdata=mappable["country"].tolist(),
+            mode="markers",
+            marker=dict(
+                size=sizes,
+                color=mappable["count"].tolist(),
+                colorscale="Turbo",
+                showscale=True,
+                colorbar=dict(title="Sample count"),
+                line=dict(width=0.6, color="#1a1a1a"),
+                opacity=0.85,
+            ),
+            hovertemplate="%{text}<br>Samples: %{marker.color}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        geo=dict(
+            projection_type="natural earth",
+            showland=True,
+            landcolor="#f2f2f2",
+            showcountries=True,
+            countrycolor="#bdbdbd",
+        ),
+        height=520,
+    )
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=520,
+    )
+    with map_placeholder:
+        selected = plotly_events(
+            fig,
+            click_event=True,
+            hover_event=False,
+            select_event=False,
+            override_height=520,
+            override_width="100%",
+        )
+
+    st.subheader("Country Selection")
+    country_options = ["All"] + sorted(located["country"].dropna().unique().tolist())
+    if "selected_country" not in st.session_state:
+        st.session_state["selected_country"] = "All"
+    if selected:
+        point_idx = selected[0].get("pointIndex")
+        if point_idx is not None and point_idx < len(mappable):
+            st.session_state["selected_country"] = mappable.iloc[point_idx]["country"]
+    selected_country = st.selectbox(
+        "Select a country to inspect samples",
+        country_options,
+        index=country_options.index(st.session_state["selected_country"])
+        if st.session_state["selected_country"] in country_options
+        else 0,
+    )
+
+    selected_rows = located
+    if selected_country != "All":
+        selected_rows = located[located["country"] == selected_country]
+
+if selected_rows.empty:
+    st.info("No samples for the selected country and filters.")
+else:
+    sp_counts = (
+        selected_rows.groupby(["country"])
+        .size()
+        .reset_index(name="count")
+    )
+    if selected_country == "All":
+        st.caption("Sample count by country")
+        st.dataframe(sp_counts, use_container_width=True, height=220)
+    else:
+        st.subheader("Species/Pathovar Breakdown")
+        tax_raw = query_df(
+            """
+            SELECT s.id AS sample_id,
+                   tx.species,
+                   tx.pathovar
+            FROM samples s
+            LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
+            """
+        )
+        selected_ids = selected_rows["sample_id"].tolist()
+        tax_filtered = tax_raw[tax_raw["sample_id"].isin(selected_ids)].copy()
+        tax_filtered["species_pathovar"] = (
+            tax_filtered["species"].fillna("Unknown")
+            + " "
+            + tax_filtered["pathovar"].fillna("")
+        ).str.strip()
+        sp_counts = (
+            tax_filtered["species_pathovar"]
+            .value_counts()
+            .rename_axis("species_pathovar")
+            .reset_index(name="count")
+            .sort_values("count", ascending=False)
+        )
+        sp_chart = (
+            alt.Chart(sp_counts)
+            .mark_bar()
+            .encode(
+                x=alt.X("count:Q", title="Sample count", axis=alt.Axis(format="d")),
+                y=alt.Y("species_pathovar:N", sort="-x", title="Species + Pathovar"),
+                tooltip=["species_pathovar:N", "count:Q"],
+            )
+        )
+        st.altair_chart(sp_chart.properties(height=300), use_container_width=True)
+
+with st.expander("Samples Without Location", expanded=False):
+    if missing_country.empty:
+        st.info("No samples missing location data.")
+    else:
+        missing_rows = missing_country[["sample_id", "strain_display"]]
+        st.dataframe(missing_rows, use_container_width=True, height=300)

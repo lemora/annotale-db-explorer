@@ -301,14 +301,14 @@ with left:
     tale_rows = query_df(
         """
         SELECT t.id AS id,
-               t.name AS name,
+               t.legacy_name AS name,
                t.is_pseudo AS is_pseudo,
                MAX(r.repeat_ordinal) + 1 AS repeat_len
-        FROM family_member fm
+        FROM tale_family_member fm
         JOIN tale t ON t.id = fm.tale_id
         LEFT JOIN repeat r ON r.tale_id = t.id
         WHERE fm.family_id = ?
-        GROUP BY t.id, t.name, t.is_pseudo
+        GROUP BY t.id, t.legacy_name, t.is_pseudo
         ORDER BY t.id
         """,
         params=[family_name],
@@ -318,11 +318,13 @@ with left:
     st.subheader("TALEs by Species + Pathovar")
     sp_counts = query_df(
         """
-        SELECT COALESCE(s.species, 'Unknown') || ' ' || COALESCE(s.pathovar, '') AS species_pathovar,
+        SELECT COALESCE(tx.species, 'Unknown') || ' ' || COALESCE(tx.pathovar, '') AS species_pathovar,
                COUNT(*) AS count
-        FROM family_member fm
+        FROM tale_family_member fm
         JOIN tale t ON t.id = fm.tale_id
-        LEFT JOIN strain s ON s.id = t.strain_id
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        LEFT JOIN samples s ON s.id = a.sample_id
+        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
         WHERE fm.family_id = ?
         GROUP BY species_pathovar
         ORDER BY count DESC
@@ -371,7 +373,7 @@ with left:
         SELECT r.repeat_ordinal AS position, r.rvd AS rvd, COUNT(*) AS count
         FROM repeat r
         JOIN tale t ON t.id = r.tale_id
-        JOIN family_member fm ON fm.tale_id = t.id
+        JOIN tale_family_member fm ON fm.tale_id = t.id
         WHERE fm.family_id = ?
         GROUP BY r.repeat_ordinal, r.rvd
         ORDER BY r.repeat_ordinal
@@ -383,7 +385,7 @@ with left:
         SELECT r.repeat_ordinal AS position, r.rvd AS rvd, COUNT(*) AS count
         FROM repeat r
         JOIN tale t ON t.id = r.tale_id
-        JOIN family_member fm ON fm.tale_id = t.id
+        JOIN tale_family_member fm ON fm.tale_id = t.id
         WHERE fm.family_id = ? AND t.is_pseudo = 0
         GROUP BY r.repeat_ordinal, r.rvd
         ORDER BY r.repeat_ordinal

@@ -131,10 +131,11 @@ col1, col2 = st.columns(2)
 family_filter = col1.selectbox("Family", family_options)
 
 strain_query = """
-SELECT DISTINCT COALESCE(s.name, 'Unknown') AS strain
-FROM family_member fm
+SELECT DISTINCT COALESCE(s.strain_name, s.legacy_strain_name, 'Unknown') AS strain
+FROM tale_family_member fm
 JOIN tale t ON t.id = fm.tale_id
-LEFT JOIN strain s ON t.strain_id = s.id
+LEFT JOIN assembly a ON a.id = t.assembly_id
+LEFT JOIN samples s ON s.id = a.sample_id
 WHERE (? = 'All' OR fm.family_id = ?)
 ORDER BY strain
 """
@@ -146,10 +147,11 @@ query = """
 SELECT r.rvd AS rvd, COUNT(*) AS count
 FROM repeat r
 JOIN tale t ON r.tale_id = t.id
-LEFT JOIN family_member fm ON t.id = fm.tale_id
-LEFT JOIN strain s ON t.strain_id = s.id
+LEFT JOIN tale_family_member fm ON t.id = fm.tale_id
+LEFT JOIN assembly a ON a.id = t.assembly_id
+LEFT JOIN samples s ON s.id = a.sample_id
 WHERE (? = 'All' OR fm.family_id = ?)
-  AND (? = 'All' OR s.name = ?)
+  AND (? = 'All' OR COALESCE(s.strain_name, s.legacy_strain_name, 'Unknown') = ?)
 GROUP BY r.rvd
 ORDER BY count DESC
 """

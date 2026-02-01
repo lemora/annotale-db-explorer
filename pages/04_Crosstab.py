@@ -17,22 +17,25 @@ view = st.radio(
 
 if view == "Strain vs. Family":
     query = """
-    SELECT COALESCE(s.name, 'Unknown') AS strain,
+    SELECT COALESCE(s.strain_name, s.legacy_strain_name, 'Unknown') AS strain,
            fm.family_id AS family,
            COUNT(*) AS count
-    FROM family_member fm
+    FROM tale_family_member fm
     JOIN tale t ON t.id = fm.tale_id
-    LEFT JOIN strain s ON s.id = t.strain_id
+    LEFT JOIN assembly a ON a.id = t.assembly_id
+    LEFT JOIN samples s ON s.id = a.sample_id
     GROUP BY strain, family
     """
 else:
     query = """
-    SELECT COALESCE(s.species, 'Unknown') || ' ' || COALESCE(s.pathovar, '') AS strain,
+    SELECT COALESCE(tx.species, 'Unknown') || ' ' || COALESCE(tx.pathovar, '') AS strain,
            fm.family_id AS family,
            COUNT(*) AS count
-    FROM family_member fm
+    FROM tale_family_member fm
     JOIN tale t ON t.id = fm.tale_id
-    LEFT JOIN strain s ON s.id = t.strain_id
+    LEFT JOIN assembly a ON a.id = t.assembly_id
+    LEFT JOIN samples s ON s.id = a.sample_id
+    LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
     GROUP BY strain, family
     """
 

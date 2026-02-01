@@ -51,27 +51,36 @@ def table_counts() -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_families() -> pd.DataFrame:
     return query_df(
-        "SELECT name, member_count, tree_newick FROM family ORDER BY member_count DESC"
+        "SELECT name, member_count, tree_newick FROM tale_family ORDER BY member_count DESC"
     )
 
 
 @st.cache_data(show_spinner=False)
 def load_family_members() -> pd.DataFrame:
-    return query_df("SELECT family_id, tale_id FROM family_member")
+    return query_df("SELECT family_id, tale_id FROM tale_family_member")
 
 
 @st.cache_data(show_spinner=False)
 def load_tales() -> pd.DataFrame:
     return query_df(
-        "SELECT id, name, name_short, name_suffix, is_pseudo, strain_id, accession_id, "
-        "start_pos, end_pos, strand, is_new, dna_seq, protein_seq FROM tale"
+        "SELECT t.id, t.legacy_name AS name, t.is_pseudo, a.sample_id AS strain_id, "
+        "t.start_pos, t.end_pos, t.strand, t.is_new, t.dna_seq, t.protein_seq "
+        "FROM tale t "
+        "LEFT JOIN assembly a ON a.id = t.assembly_id"
     )
 
 
 @st.cache_data(show_spinner=False)
 def load_strains() -> pd.DataFrame:
     return query_df(
-        "SELECT id, name, species, pathovar, isolate, geo_tag, tax_id FROM strain"
+        "SELECT s.id AS id, "
+        "COALESCE(s.strain_name, s.legacy_strain_name) AS name, "
+        "tx.species AS species, "
+        "tx.pathovar AS pathovar, "
+        "s.geo_tag AS geo_tag, "
+        "tx.ncbi_tax_id AS tax_id "
+        "FROM samples s "
+        "LEFT JOIN taxonomy tx ON tx.id = s.taxon_id"
     )
 
 
@@ -81,4 +90,3 @@ def load_repeats() -> pd.DataFrame:
         "SELECT tale_id, repeat_ordinal, rvd, rvd_pos, rvd_len, masked_seq_1, masked_seq_2 "
         "FROM repeat"
     )
-
