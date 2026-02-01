@@ -8,6 +8,7 @@ from tree_utils import layout_tree, try_parse_newick
 
 st.set_page_config(page_title="TALE Families", layout="wide")
 
+st.session_state["active_page"] = "TALE Families"
 st.title("TALE Families")
 
 INNER_SPACING = 38.0

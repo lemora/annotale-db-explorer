@@ -90,3 +90,12 @@ def load_repeats() -> pd.DataFrame:
         "SELECT tale_id, repeat_ordinal, rvd, rvd_pos, rvd_len, masked_seq_1, masked_seq_2 "
         "FROM repeat"
     )
+
+
+@st.cache_data(show_spinner=False)
+def load_sample_taxonomy() -> pd.DataFrame:
+    return query_df(
+        "SELECT s.id AS sample_id, tx.species, tx.pathovar "
+        "FROM samples s "
+        "LEFT JOIN taxonomy tx ON tx.id = s.taxon_id"
+    )

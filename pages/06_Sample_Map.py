@@ -1,15 +1,18 @@
 import altair as alt
-import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from streamlit_plotly_events import plotly_events
 
-from db_utils import query_df
+from db_utils import load_sample_taxonomy, query_df
 
 st.set_page_config(page_title="Sample Map", layout="wide")
 
 st.title("Sample Locations")
 st.caption("Country-level map; dot size indicates sample count.")
+current_page = "Sample Map"
+if st.session_state.get("active_page") != current_page:
+    st.session_state["selected_country"] = "All"
+st.session_state["active_page"] = current_page
 
 raw = query_df(
     """
@@ -104,17 +107,24 @@ raw["strain_display"] = raw["strain_name"].fillna(raw["legacy_strain_name"]).fil
     "Unknown"
 )
 raw["country"] = raw["geo_tag"].apply(parse_country)
+located_mask = raw["country"].notna() & (raw["country"] != "")
 
 view_mode = st.radio(
     "View mode",
     ["Static", "Cumulative by year"],
     horizontal=True,
+    key="sample_map_view_mode",
 )
+if "sample_map_prev_view" not in st.session_state:
+    st.session_state["sample_map_prev_view"] = view_mode
+elif st.session_state["sample_map_prev_view"] != view_mode:
+    st.session_state["selected_country"] = "All"
+    st.session_state["sample_map_prev_view"] = view_mode
 
 map_placeholder = st.container()
 cutoff_year = None
 if view_mode == "Cumulative by year":
-    valid_years = raw["year"].dropna().astype(int)
+    valid_years = raw.loc[located_mask, "year"].dropna().astype(int)
     if valid_years.empty:
         st.info("No usable collection years found; showing static view instead.")
         view_mode = "Static"
@@ -150,6 +160,7 @@ counts["lon"] = counts["country"].map(
 )
 
 mappable = counts.dropna(subset=["lat", "lon"]).copy()
+selected_country = "All"
 
 if mappable.empty:
     st.info("No mappable locations found for the current filters.")
@@ -188,10 +199,6 @@ else:
             showcountries=True,
             countrycolor="#bdbdbd",
         ),
-        height=520,
-    )
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
         height=520,
     )
     with map_placeholder:
@@ -237,15 +244,7 @@ else:
         st.dataframe(sp_counts, use_container_width=True, height=220)
     else:
         st.subheader("Species/Pathovar Breakdown")
-        tax_raw = query_df(
-            """
-            SELECT s.id AS sample_id,
-                   tx.species,
-                   tx.pathovar
-            FROM samples s
-            LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
-            """
-        )
+        tax_raw = load_sample_taxonomy()
         selected_ids = selected_rows["sample_id"].tolist()
         tax_filtered = tax_raw[tax_raw["sample_id"].isin(selected_ids)].copy()
         tax_filtered["species_pathovar"] = (
@@ -253,6 +252,9 @@ else:
             + " "
             + tax_filtered["pathovar"].fillna("")
         ).str.strip()
+        tax_filtered["species_pathovar"] = tax_filtered["species_pathovar"].str.replace(
+            "Xanthomonas", "X.", regex=False
+        )
         sp_counts = (
             tax_filtered["species_pathovar"]
             .value_counts()

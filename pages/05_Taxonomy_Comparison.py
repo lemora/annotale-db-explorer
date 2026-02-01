@@ -6,6 +6,7 @@ from db_utils import query_df
 
 st.set_page_config(page_title="Taxonomy Comparison", layout="wide")
 
+st.session_state["active_page"] = "Taxonomy Comparison"
 st.title("Taxonomy: NCBI vs Legacy")
 st.caption(
     "Legacy taxonomy is inferred from the first token of `samples.legacy_strain_name` "
@@ -104,7 +105,6 @@ else:
     st.altair_chart(mismatch_chart.properties(height=360), use_container_width=True)
 
 st.subheader("Samples With Differing Taxonomy")
-limit = st.slider("Mismatch sample limit", 10, 200, 50, 10)
 show_cols = [
     "legacy_taxon",
     "ncbi_taxon",
@@ -116,4 +116,4 @@ grouped_rows = (
     .reset_index(name="count")
     .sort_values("count", ascending=False)
 )
-st.dataframe(grouped_rows.head(limit), use_container_width=True, height=360)
+st.dataframe(grouped_rows, use_container_width=True, height=360)

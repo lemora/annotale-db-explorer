@@ -4,14 +4,18 @@ from db_utils import list_tables, query_df, table_counts, table_schema
 
 st.set_page_config(page_title="DB Overview", layout="wide")
 
+st.session_state["active_page"] = "Overview"
 st.title("Database Overview")
 
 counts = table_counts()
 tables = counts["table"].tolist()
+meta_tables = {"schema_migrations", "data_version", "sqlite_sequence"}
 
 st.subheader("Tables")
 filter_text = st.text_input("Filter tables", value="")
-filtered = [t for t in tables if filter_text.lower() in t.lower()]
+show_meta = st.checkbox("Show meta tables", value=False)
+visible_tables = [t for t in tables if show_meta or t not in meta_tables]
+filtered = [t for t in visible_tables if filter_text.lower() in t.lower()]
 
 cols_per_row = 4
 for i in range(0, len(filtered), cols_per_row):
@@ -22,11 +26,13 @@ for i in range(0, len(filtered), cols_per_row):
             st.session_state["selected_table"] = table
 
 selected = st.session_state.get("selected_table")
-if selected is None and tables:
-    selected = tables[0]
+if selected not in visible_tables and visible_tables:
+    selected = visible_tables[0]
 
 st.subheader("Table Explorer")
-table = st.selectbox("Select a table", tables, index=tables.index(selected))
+table = st.selectbox(
+    "Select a table", visible_tables, index=visible_tables.index(selected)
+)
 st.session_state["selected_table"] = table
 
 schema = table_schema(table)

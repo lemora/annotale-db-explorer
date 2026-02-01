@@ -5,6 +5,7 @@ from db_utils import query_df
 
 st.set_page_config(page_title="Pathovar/Strain vs. Family", layout="wide")
 
+st.session_state["active_page"] = "Crosstab"
 st.title("Pathovar/Strain vs. Family Cross-Tab")
 
 view = st.radio(

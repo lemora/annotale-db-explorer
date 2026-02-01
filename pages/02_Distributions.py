@@ -6,6 +6,7 @@ from db_utils import load_families, load_tales, load_strains, query_df
 
 st.set_page_config(page_title="Distributions", layout="wide")
 
+st.session_state["active_page"] = "Distributions"
 st.title("Distributions and Summary")
 
 families = load_families()
