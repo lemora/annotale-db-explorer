@@ -6,7 +6,7 @@ st.set_page_config(page_title="DB Overview", layout="wide")
 
 st.sidebar.image("img/AnnoTALE_transp.png", width=140)
 
-st.session_state["active_page"] = "Overview"
+st.session_state["active_page"] = "DB Overview"
 st.title("Database Overview")
 
 counts = table_counts()

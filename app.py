@@ -14,16 +14,14 @@ with left:
     st.image("img/AnnoTALE_transp.png", width=260)
     st.markdown(
         """
-        Explore the `annotale.db` SQLite database with fast, interactive views for TALE families,
-        repeat composition, strain/species distributions, and taxonomy comparisons.
+        Explore the latest `annotale.db` database with interactive, schema-aware views.
 
-        Use the navigation sidebar to jump between:
-        - Overview of tables and schemas
-        - Distributions (TALEs, families, RVDs)
-        - TALE families and tree inspection
-        - Crosstabs (strain/species vs. family)
-        - Taxonomy comparison (NCBI vs. legacy)
-        - Sample locations and year filters
+        **Quick start**
+        - Browse tables and schemas in **DB Overview**
+        - Inspect distributions (TALE length, RVDs, families) in **Distributions**
+        - Explore phylogeny in **TALE Families**
+        - Compare taxa and strains in **Crosstab** and **Taxonomy Comparison**
+        - Visualize sample geography in **Sample Map**
         """
     )
 with right:
