@@ -4,6 +4,49 @@ import streamlit as st
 
 from db_utils import load_families, load_tales, load_strains, query_df
 
+LENGTH_SOURCES = ["Genomic coordinates", "DNA sequence", "Protein sequence"]
+DISCREPANCY_LABELS = {
+    0: "0 (inclusive)",
+    1: "1 (end excluded)",
+    3: "3 (stop+inclusive)",
+    4: "4 (stop+excluded)",
+    7: "7",
+    22: "22",
+    31: "31",
+}
+DISCREPANCY_ORDER = [
+    "0 (inclusive)",
+    "1 (end excluded)",
+    "3 (stop+inclusive)",
+    "4 (stop+excluded)",
+    "7",
+    "22",
+    "31",
+]
+
+
+def apply_tale_filters(
+    df: pd.DataFrame, exclude_pseudo: bool, exclude_missing_genomic: bool
+) -> pd.DataFrame:
+    filtered = df.copy()
+    if exclude_pseudo:
+        filtered = filtered[filtered["is_pseudo"].fillna(0) == 0]
+    if exclude_missing_genomic:
+        filtered = filtered[
+            filtered["start_pos"].notnull() & filtered["end_pos"].notnull()
+        ]
+    return filtered
+
+
+def add_length_column(df: pd.DataFrame, source: str) -> pd.DataFrame:
+    if source == "Genomic coordinates":
+        df["length"] = df["end_pos"] - df["start_pos"] + 1
+    elif source == "DNA sequence":
+        df["length"] = df["dna_seq"].fillna("").str.len()
+    else:
+        df["length"] = df["protein_seq"].fillna("").str.len()
+    return df
+
 st.set_page_config(page_title="Distributions", layout="wide")
 
 st.sidebar.image("img/AnnoTALE_transp.png", width=140)
@@ -35,23 +78,14 @@ else:
     st.altair_chart(family_chart.properties(height=300), use_container_width=True)
 
 st.subheader("TALE Lengths")
-length_source = st.selectbox(
-    "Length source",
-    ["Genomic coordinates", "DNA sequence", "Protein sequence"],
-    index=0,
+length_source = st.selectbox("Length source", LENGTH_SOURCES, index=0)
+exclude_pseudo = st.checkbox("Exclude pseudo TALEs", value=True)
+exclude_missing_genomic = st.checkbox(
+    "Exclude TALEs without genomic positions", value=False
 )
-exclude_pseudo = st.checkbox("Exclude pseudo TALEs", value=False)
 
-lengths = tales.copy()
-if exclude_pseudo:
-    lengths = lengths[lengths["is_pseudo"].fillna(0) == 0]
-if length_source == "Genomic coordinates":
-    lengths["length"] = lengths["end_pos"] - lengths["start_pos"] + 1
-elif length_source == "DNA sequence":
-    lengths["length"] = lengths["dna_seq"].fillna("").str.len()
-else:
-    lengths["length"] = lengths["protein_seq"].fillna("").str.len()
-
+lengths = apply_tale_filters(tales, exclude_pseudo, exclude_missing_genomic)
+lengths = add_length_column(lengths, length_source)
 lengths = lengths[pd.notnull(lengths["length"]) & (lengths["length"] > 0)]
 
 len_chart = (
@@ -65,6 +99,96 @@ len_chart = (
 )
 
 st.altair_chart(len_chart.properties(height=300), use_container_width=True)
+
+st.caption("TALEs where DNA length differs from genomic length")
+length_compare = lengths.copy()
+length_compare["genomic_length"] = (
+    length_compare["end_pos"] - length_compare["start_pos"] + 1
+)
+length_compare["dna_length"] = length_compare["dna_seq"].fillna("").str.len()
+length_compare["protein_length"] = (
+    length_compare["protein_seq"].fillna("").str.len()
+)
+length_compare["length_diff"] = (
+    length_compare["genomic_length"] - length_compare["dna_length"]
+)
+length_compare["protein_len_times3_minus_dna"] = (
+    (length_compare["protein_length"] * 3) - length_compare["dna_length"]
+)
+metric_left, metric_right = st.columns(2)
+comparable = length_compare[
+    length_compare["genomic_length"].notnull()
+    & (length_compare["genomic_length"] > 0)
+    & (length_compare["dna_length"] > 0)
+]
+length_compare = comparable[
+    comparable["genomic_length"] != comparable["dna_length"]
+]
+metric_left.metric("TALEs with comparable lengths", len(comparable))
+metric_right.metric("TALEs with length discrepancy", len(length_compare))
+if length_compare.empty:
+    st.info("No TALEs found with differing lengths under the current filters.")
+else:
+    st.caption("Genomic minus DNA length (+1)")
+    stats = (
+        comparable[["genomic_length", "dna_length"]]
+        .assign(
+            genomic_minus_dna_plus1=lambda df: df["genomic_length"] - df["dna_length"]
+        )
+        .groupby("genomic_minus_dna_plus1")
+        .size()
+        .reset_index(name="count")
+    )
+    stats = stats[
+        stats["genomic_minus_dna_plus1"].isin(DISCREPANCY_LABELS.keys())
+    ]
+    stats["label"] = stats["genomic_minus_dna_plus1"].map(DISCREPANCY_LABELS)
+    stats = (
+        stats.set_index("label")
+        .reindex(DISCREPANCY_ORDER, fill_value=0)
+        .reset_index()
+    )
+    bar_chart = (
+        alt.Chart(stats)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                "label:N",
+                title="Genomic − DNA length (+1)",
+                sort=DISCREPANCY_ORDER,
+            ),
+            y=alt.Y("count:Q", title="TALE count"),
+            tooltip=["label:N", "count:Q"],
+        )
+    )
+    label_chart = (
+        alt.Chart(stats)
+        .mark_text(dy=-6)
+        .encode(
+            x=alt.X("label:N", sort=DISCREPANCY_ORDER),
+            y=alt.Y("count:Q"),
+            text=alt.Text("count:Q"),
+        )
+    )
+    st.altair_chart(
+        (bar_chart + label_chart).properties(height=220), use_container_width=True
+    )
+    st.dataframe(
+        length_compare[
+            [
+                "id",
+                "name",
+                "start_pos",
+                "end_pos",
+                "genomic_length",
+                "dna_length",
+                "length_diff",
+                "protein_len_times3_minus_dna",
+            ]
+        ].rename(columns={"length_diff": "genomic_minus_dna_plus1"}),
+        use_container_width=True,
+        height=260,
+    )
 
 st.subheader("TALEs by Strain / Species + Pathovar")
 if strains.empty:
