@@ -191,9 +191,30 @@ if families.empty:
 left, right = st.columns([2, 3])
 
 with left:
-    family_name = st.selectbox(
-        "Family", sorted(families["name"].tolist()), key="family_name"
+    family_options = sorted(families["name"].tolist())
+    family_sizes = dict(zip(families["name"], families["member_count"]))
+    if "family_idx" not in st.session_state:
+        st.session_state["family_idx"] = 0
+    st.session_state["family_idx"] = max(
+        0, min(st.session_state["family_idx"], len(family_options) - 1)
     )
+    prev_col, next_col = st.columns(2)
+    current_idx = st.session_state["family_idx"]
+    if prev_col.button("<- Previous"):
+        st.session_state["family_idx"] = (current_idx - 1) % len(family_options)
+        st.rerun()
+    if next_col.button("Next ->"):
+        st.session_state["family_idx"] = (current_idx + 1) % len(family_options)
+        st.rerun()
+    selected_family = st.selectbox(
+        "Family",
+        family_options,
+        index=st.session_state["family_idx"],
+        format_func=lambda name: f"{name} ({int(family_sizes.get(name, 0))})",
+    )
+    if family_options[st.session_state["family_idx"]] != selected_family:
+        st.session_state["family_idx"] = family_options.index(selected_family)
+    family_name = selected_family
 
 row = families[families["name"] == family_name].iloc[0]
 if st.session_state.get("prev_family") != family_name:
