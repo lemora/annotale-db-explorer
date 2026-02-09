@@ -4,6 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from db_utils import load_families, load_tales, query_df
+from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
 from tree_utils import layout_tree, try_parse_newick
 
 st.set_page_config(page_title="TALE Families", layout="wide")
@@ -279,7 +280,15 @@ spec = {
             ],
             "value": "#bdbdbd",
         },
-        "tooltip": {"field": "tooltip_text", "type": "nominal", "title": "TALE"},
+        "tooltip": {
+            "condition": {
+                "test": "datum.tooltip_text != null && datum.tooltip_text !== ''",
+                "field": "tooltip_text",
+                "type": "nominal",
+                "title": "TALE",
+            },
+            "value": None,
+        },
     },
 }
 
@@ -319,24 +328,45 @@ with left:
     render_tale_table(tale_rows, selected_id)
 
     st.subheader("TALEs by Species + Pathovar")
-    sp_counts = query_df(
+    sp_raw = query_df(
         """
-        SELECT COALESCE(tx.species, 'Unknown') || ' ' || COALESCE(tx.pathovar, '') AS species_pathovar,
-               COUNT(*) AS count
+        SELECT s.id AS sample_id,
+               s.legacy_strain_name,
+               tx.species,
+               tx.pathovar,
+               tx.raw_name AS taxon_name
         FROM tale_family_member fm
         JOIN tale t ON t.id = fm.tale_id
         LEFT JOIN assembly a ON a.id = t.assembly_id
         LEFT JOIN samples s ON s.id = a.sample_id
         LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
         WHERE fm.family_id = ?
-        GROUP BY species_pathovar
-        ORDER BY count DESC
         """,
         params=[family_name],
     )
-    if sp_counts.empty:
+    if sp_raw.empty:
         st.info("No species/pathovar data for this family.")
     else:
+        legacy_map = build_legacy_taxon_map(
+            sp_raw,
+            include_pathovar=True,
+            legacy_col="legacy_strain_name",
+            sample_id_col="sample_id",
+        )
+        species_pathovar = apply_taxon_fallback(
+            sp_raw,
+            include_pathovar=True,
+            legacy_map=legacy_map,
+            id_col="sample_id",
+            legacy_col="legacy_strain_name",
+        )
+        sp_counts = (
+            species_pathovar.dropna()
+            .value_counts()
+            .rename_axis("species_pathovar")
+            .reset_index(name="count")
+            .sort_values("count", ascending=False)
+        )
         sp_counts["species_pathovar"] = sp_counts["species_pathovar"].str.replace(
             "Xanthomonas", "X.", regex=False
         )

@@ -4,6 +4,7 @@ import streamlit as st
 from streamlit_plotly_events import plotly_events
 
 from db_utils import load_sample_taxonomy, query_df
+from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
 
 st.set_page_config(page_title="Sample Map", layout="wide")
 
@@ -48,10 +49,14 @@ def parse_country(value: str | None) -> str | None:
     cleaned = str(value).strip()
     if not cleaned:
         return None
+    if cleaned in {"-", "Unknown", "Missing"}:
+        return None
     if ":" in cleaned:
         cleaned = cleaned.split(":", 1)[0].strip()
     if "," in cleaned:
         cleaned = cleaned.split(",", 1)[0].strip()
+    if cleaned in {"-", "Unknown", "Missing"}:
+        return None
     return cleaned
 
 
@@ -249,11 +254,20 @@ else:
         tax_raw = load_sample_taxonomy()
         selected_ids = selected_rows["sample_id"].tolist()
         tax_filtered = tax_raw[tax_raw["sample_id"].isin(selected_ids)].copy()
-        tax_filtered["species_pathovar"] = (
-            tax_filtered["species"].fillna("Unknown")
-            + " "
-            + tax_filtered["pathovar"].fillna("")
-        ).str.strip()
+
+        legacy_map = build_legacy_taxon_map(
+            tax_raw,
+            include_pathovar=True,
+            legacy_col="legacy_strain_name",
+            sample_id_col="sample_id",
+        )
+        tax_filtered["species_pathovar"] = apply_taxon_fallback(
+            tax_filtered,
+            include_pathovar=True,
+            legacy_map=legacy_map,
+            id_col="sample_id",
+            legacy_col="legacy_strain_name",
+        )
         tax_filtered["species_pathovar"] = tax_filtered["species_pathovar"].str.replace(
             "Xanthomonas", "X.", regex=False
         )

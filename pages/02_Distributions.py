@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 
 from db_utils import load_families, load_tales, load_strains, query_df
+from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
 
 LENGTH_SOURCES = ["Genomic coordinates", "DNA sequence", "Protein sequence"]
 DISCREPANCY_LABELS = {
@@ -195,7 +196,16 @@ if strains.empty:
     st.info("No strain metadata available.")
 else:
     tales_with_strain = tales.merge(
-        strains[["id", "name", "species", "pathovar"]],
+        strains[
+            [
+                "id",
+                "name",
+                "species",
+                "pathovar",
+                "taxon_name",
+                "legacy_strain_name",
+            ]
+        ],
         left_on="strain_id",
         right_on="id",
         how="left",
@@ -203,7 +213,7 @@ else:
     )
     view = st.radio(
         "",
-        ["Strain", "Species + Pathovar"],
+        ["Species", "Species + Pathovar", "Strain"],
         index=0,
         horizontal=True,
         key="dist_view",
@@ -213,16 +223,25 @@ else:
         y_field = "strain"
         y_title = "Strain"
     else:
-        tales_with_strain["species_pathovar"] = (
-            tales_with_strain["species"].fillna("Unknown")
-            + " "
-            + tales_with_strain["pathovar"].fillna("")
+        include_pathovar = view == "Species + Pathovar"
+        legacy_map = build_legacy_taxon_map(
+            strains,
+            include_pathovar=include_pathovar,
+            legacy_col="legacy_strain_name",
+            sample_id_col="id",
+        )
+        tales_with_strain["species_pathovar"] = apply_taxon_fallback(
+            tales_with_strain,
+            include_pathovar=include_pathovar,
+            legacy_map=legacy_map,
+            id_col="strain_id",
+            legacy_col="legacy_strain_name",
         )
         tales_with_strain["species_pathovar"] = tales_with_strain[
             "species_pathovar"
         ].str.replace("Xanthomonas", "X.", regex=False)
         y_field = "species_pathovar"
-        y_title = "Species + Pathovar"
+        y_title = "Species" if view == "Species" else "Species + Pathovar"
 
     counts = tales_with_strain.groupby(y_field).size().reset_index(name="count")
     counts = counts.sort_values("count", ascending=False)

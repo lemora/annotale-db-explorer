@@ -57,7 +57,6 @@ def format_ncbi_taxon(row: pd.Series) -> str:
     return "Unknown"
 
 
-raw["legacy_code"] = raw["legacy_code"].fillna("Unknown")
 raw["ncbi_taxon"] = raw.apply(format_ncbi_taxon, axis=1)
 
 seed = (
@@ -71,6 +70,11 @@ seed = (
 legacy_map = dict(seed.set_index("legacy_code")["ncbi_taxon"].to_dict())
 raw["legacy_taxon"] = raw["legacy_code"].map(legacy_map)
 raw["legacy_taxon"] = raw["legacy_taxon"].fillna("Unknown legacy taxonomy")
+raw["ncbi_taxon"] = raw["ncbi_taxon"].where(
+    raw["ncbi_taxon"] != "Unknown", raw["legacy_taxon"]
+)
+raw["ncbi_taxon"] = raw["ncbi_taxon"].replace("Unknown legacy taxonomy", "Unknown")
+raw["ncbi_taxon"] = raw["ncbi_taxon"].fillna("Unknown")
 
 st.subheader("Taxonomy Mismatch Overview")
 mismatches = raw[
@@ -88,9 +92,8 @@ else:
         .reset_index(name="count")
         .sort_values("count", ascending=False)
     )
-    plot_df = mismatch_counts
     mismatch_chart = (
-        alt.Chart(plot_df)
+        alt.Chart(mismatch_counts)
         .mark_bar()
         .encode(
             y=alt.Y(

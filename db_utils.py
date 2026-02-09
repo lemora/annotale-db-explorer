@@ -72,16 +72,40 @@ def load_tales() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def load_strains() -> pd.DataFrame:
-    return query_df(
+    df = query_df(
         "SELECT s.id AS id, "
-        "COALESCE(s.strain_name, s.legacy_strain_name) AS name, "
+        "s.strain_name AS strain_name, "
+        "s.legacy_strain_name AS legacy_strain_name, "
         "tx.species AS species, "
         "tx.pathovar AS pathovar, "
+        "tx.raw_name AS taxon_name, "
         "s.geo_tag AS geo_tag, "
         "tx.ncbi_tax_id AS tax_id "
         "FROM samples s "
         "LEFT JOIN taxonomy tx ON tx.id = s.taxon_id"
     )
+    strain_name = df["strain_name"].fillna("").str.strip()
+    legacy_name = df["legacy_strain_name"].fillna("").str.strip()
+
+    def last_token(series: pd.Series) -> pd.Series:
+        return series.str.split().str[-1]
+
+    strain_last = last_token(strain_name)
+    legacy_last = last_token(legacy_name)
+    df["name"] = strain_last.where(strain_name != "", legacy_last)
+    return df[
+        [
+            "id",
+            "name",
+            "species",
+            "pathovar",
+            "taxon_name",
+            "geo_tag",
+            "tax_id",
+            "strain_name",
+            "legacy_strain_name",
+        ]
+    ]
 
 
 @st.cache_data(show_spinner=False)
@@ -95,7 +119,7 @@ def load_repeats() -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_sample_taxonomy() -> pd.DataFrame:
     return query_df(
-        "SELECT s.id AS sample_id, tx.species, tx.pathovar "
+        "SELECT s.id AS sample_id, s.legacy_strain_name, tx.species, tx.pathovar, tx.raw_name AS taxon_name "
         "FROM samples s "
         "LEFT JOIN taxonomy tx ON tx.id = s.taxon_id"
     )
