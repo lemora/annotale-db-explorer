@@ -63,21 +63,6 @@ if tales.empty:
     st.warning("No TALE records found.")
     st.stop()
 
-st.subheader("Family Size Distribution")
-if families.empty:
-    st.info("No family data available.")
-else:
-    family_chart = (
-        alt.Chart(families)
-        .mark_bar()
-        .encode(
-            x=alt.X("member_count:Q", bin=alt.Bin(maxbins=50), title="Members"),
-            y=alt.Y("count():Q", title="Families"),
-            tooltip=["count():Q"],
-        )
-    )
-    st.altair_chart(family_chart.properties(height=300), use_container_width=True)
-
 st.subheader("TALE Lengths")
 length_source = st.selectbox("Length source", LENGTH_SOURCES, index=0)
 exclude_pseudo = st.checkbox("Exclude pseudo TALEs", value=True)
@@ -123,10 +108,11 @@ comparable = length_compare[
     & (length_compare["genomic_length"] > 0)
     & (length_compare["dna_length"] > 0)
 ]
-length_compare = comparable[
-    comparable["genomic_length"] != comparable["dna_length"]
-]
-metric_left.metric("TALEs with comparable lengths", len(comparable))
+length_compare = comparable[comparable["genomic_length"] != comparable["dna_length"]]
+table_data = comparable.assign(
+    genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
+)
+metric_left.metric("Number of TALEs", len(comparable))
 metric_right.metric("TALEs with length discrepancy", len(length_compare))
 if length_compare.empty:
     st.info("No TALEs found with differing lengths under the current filters.")
@@ -174,7 +160,7 @@ else:
         (bar_chart + label_chart).properties(height=220), use_container_width=True
     )
     st.dataframe(
-        length_compare[
+        table_data[
             [
                 "id",
                 "name",
@@ -184,11 +170,11 @@ else:
                 "strand",
                 "genomic_length",
                 "dna_length",
-                "length_diff",
+                "genomic_minus_dna",
                 "dna_last3",
                 "dna_ends_with_stop",
             ]
-        ].rename(columns={"length_diff": "genomic_minus_dna"}),
+        ],
         use_container_width=True,
         height=260,
     )
@@ -272,81 +258,82 @@ else:
     )
     st.altair_chart(strain_chart.properties(height=chart_height), use_container_width=True)
 
-st.subheader("RVD Composition")
-family_options = ["All"] + families["name"].tolist()
-
-col1, col2 = st.columns(2)
-family_filter = col1.selectbox("Family", family_options)
-
-strain_query = """
-SELECT DISTINCT COALESCE(s.strain_name, s.legacy_strain_name, 'Unknown') AS strain
-FROM tale_family_member fm
-JOIN tale t ON t.id = fm.tale_id
-LEFT JOIN assembly a ON a.id = t.assembly_id
-LEFT JOIN samples s ON s.id = a.sample_id
-WHERE (? = 'All' OR fm.family_id = ?)
-ORDER BY strain
-"""
-strain_df = query_df(strain_query, params=[family_filter, family_filter])
-strain_options = ["All"] + strain_df["strain"].fillna("Unknown").tolist()
-strain_filter = col2.selectbox("Strain", strain_options)
-
-query = """
-SELECT r.rvd AS rvd, COUNT(*) AS count
-FROM repeat r
-JOIN tale t ON r.tale_id = t.id
-LEFT JOIN tale_family_member fm ON t.id = fm.tale_id
-LEFT JOIN assembly a ON a.id = t.assembly_id
-LEFT JOIN samples s ON s.id = a.sample_id
-WHERE (? = 'All' OR fm.family_id = ?)
-  AND (? = 'All' OR COALESCE(s.strain_name, s.legacy_strain_name, 'Unknown') = ?)
-GROUP BY r.rvd
-ORDER BY count DESC
-"""
-rvd_counts = query_df(
-    query, params=[family_filter, family_filter, strain_filter, strain_filter]
-)
-
-if rvd_counts.empty:
-    st.warning("No repeats match the current filters.")
-else:
-    chart = (
-        alt.Chart(rvd_counts)
-        .mark_bar()
-        .encode(
-            y=alt.Y("rvd:N", sort="-x", title="RVD"),
-            x=alt.X("count:Q", title="Count"),
-            tooltip=["rvd:N", "count:Q"],
-        )
-    )
-    st.altair_chart(chart.properties(height=400), use_container_width=True)
-
 st.subheader("RVD Counts by Repeat Position")
 pos_query = """
-SELECT repeat_ordinal AS position, rvd, COUNT(*) AS count
+SELECT repeat_ordinal AS position, rvd, tale_id
 FROM repeat
-GROUP BY repeat_ordinal, rvd
-ORDER BY repeat_ordinal
 """
-pos_counts = query_df(pos_query)
+pos_raw = query_df(pos_query)
 
-if pos_counts.empty:
+if pos_raw.empty:
     st.warning("No repeat data available for position plot.")
 else:
-    mode = st.radio(
-        "Plot type",
-        ["Stacked bars", "Grouped bars"],
+    tax_filter = st.radio(
+        "Filter by taxonomy",
+        ["All", "Species", "Species + Pathovar"],
         horizontal=True,
-        index=0,
-        key="rvd_pos_plot_type",
+        key="rvd_pos_tax_filter",
     )
-    stacked = mode == "Stacked bars"
-    limit_default = mode == "Grouped bars"
-    limit_topk = st.checkbox("Limit to top‑K RVDs per position", value=limit_default)
-    default_k = 5 if mode == "Grouped bars" else 7
+
+    plot_source = pos_raw.merge(
+        tales[["id", "strain_id"]],
+        left_on="tale_id",
+        right_on="id",
+        how="left",
+        suffixes=("", "_tale"),
+    )
+    plot_source = plot_source.merge(
+        strains[["id", "species", "pathovar", "taxon_name", "legacy_strain_name"]],
+        left_on="strain_id",
+        right_on="id",
+        how="left",
+        suffixes=("", "_strain"),
+    )
+
+    if tax_filter != "All":
+        if strains.empty:
+            st.info("No strain metadata available; showing all repeats.")
+        else:
+            include_pathovar = tax_filter == "Species + Pathovar"
+            legacy_map = build_legacy_taxon_map(
+                strains,
+                include_pathovar=include_pathovar,
+                legacy_col="legacy_strain_name",
+                sample_id_col="id",
+            )
+            plot_source["species_pathovar"] = apply_taxon_fallback(
+                plot_source,
+                include_pathovar=include_pathovar,
+                legacy_map=legacy_map,
+                id_col="strain_id",
+                legacy_col="legacy_strain_name",
+            )
+            plot_source["species_pathovar"] = plot_source["species_pathovar"].str.replace(
+                "Xanthomonas", "X.", regex=False
+            )
+            taxon_options = ["All"] + sorted(
+                plot_source["species_pathovar"].dropna().unique().tolist()
+            )
+            selected_taxon = st.selectbox(
+                tax_filter, taxon_options, key="rvd_pos_taxon"
+            )
+            if selected_taxon != "All":
+                plot_source = plot_source[
+                    plot_source["species_pathovar"] == selected_taxon
+                ]
+
+    if plot_source.empty:
+        st.warning("No repeats match the current taxonomy filter.")
+        plot_counts = pd.DataFrame(columns=["position", "rvd", "count"])
+    else:
+        plot_counts = (
+            plot_source.groupby(["position", "rvd"]).size().reset_index(name="count")
+        )
+
+    limit_topk = st.checkbox("Limit to top‑K RVDs per position", value=False)
+    default_k = 7
     top_k = st.slider("K", 3, 15, default_k, 1, disabled=not limit_topk)
 
-    plot_counts = pos_counts.copy()
     if limit_topk:
         plot_counts = (
             plot_counts.sort_values(["position", "count"], ascending=[True, False])
@@ -354,22 +341,36 @@ else:
             .head(top_k)
         )
 
-    legend_selection = alt.selection_point(fields=["rvd"], bind="legend")
-    pos_chart = (
-        alt.Chart(plot_counts)
-        .mark_bar()
-        .encode(
-            x=alt.X(
-                "position:O",
-                title="Repeat position within TALE",
-                sort="ascending",
-            ),
-            xOffset=alt.XOffset("rvd:N") if not stacked else alt.value(0),
-            y=alt.Y("count:Q", title="RVD count", stack="zero" if stacked else None),
-            color=alt.Color("rvd:N", title="RVD"),
-            tooltip=["position:Q", "rvd:N", "count:Q"],
+    if plot_counts.empty:
+        st.info("No repeat data to plot for the current filters.")
+    else:
+        legend_selection = alt.selection_point(fields=["rvd"], bind="legend")
+        pos_chart = (
+            alt.Chart(plot_counts)
+            .mark_bar()
+            .encode(
+                x=alt.X(
+                    "position:O",
+                    title="Repeat position within TALE",
+                    sort="ascending",
+                ),
+                y=alt.Y(
+                    "count:Q",
+                    title="RVD percent",
+                    stack="normalize",
+                    axis=alt.Axis(format=".0%"),
+                ),
+                color=alt.Color("rvd:N", title="RVD"),
+                tooltip=[
+                    "position:Q",
+                    "rvd:N",
+                    "count:Q",
+                    alt.Tooltip("percent:Q", title="Percent", format=".1%"),
+                ],
+            )
+            .add_params(legend_selection)
+            .transform_filter(legend_selection)
+            .transform_joinaggregate(total="sum(count)", groupby=["position"])
+            .transform_calculate(percent="datum.count / datum.total")
         )
-        .add_params(legend_selection)
-        .transform_filter(legend_selection)
-    )
-    st.altair_chart(pos_chart.properties(height=400), use_container_width=True)
+        st.altair_chart(pos_chart.properties(height=400), use_container_width=True)
