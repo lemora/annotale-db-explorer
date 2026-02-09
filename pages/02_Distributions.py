@@ -7,22 +7,22 @@ from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
 
 LENGTH_SOURCES = ["Genomic coordinates", "DNA sequence", "Protein sequence"]
 DISCREPANCY_LABELS = {
-    0: "0 (inclusive)",
-    1: "1 (end excluded)",
-    3: "3 (stop+inclusive)",
-    4: "4 (stop+excluded)",
-    7: "7",
-    22: "22",
-    31: "31",
+    -1: "-1 (ei)",
+    0: "0 (ee)",
+    2: "2 (stop+ei)",
+    3: "3 (stop + ee)",
+    6: "6 (aa+stop+ee)",
+    21: "21",
+    30: "30",
 }
 DISCREPANCY_ORDER = [
-    "0 (inclusive)",
-    "1 (end excluded)",
-    "3 (stop+inclusive)",
-    "4 (stop+excluded)",
-    "7",
-    "22",
-    "31",
+    "-1 (ei)",
+    "0 (ee)",
+    "2 (stop+ei)",
+    "3 (stop + ee)",
+    "6 (aa+stop+ee)",
+    "21",
+    "30",
 ]
 
 
@@ -103,18 +103,19 @@ st.altair_chart(len_chart.properties(height=300), use_container_width=True)
 
 st.caption("TALEs where DNA length differs from genomic length")
 length_compare = lengths.copy()
-length_compare["genomic_length"] = (
-    length_compare["end_pos"] - length_compare["start_pos"] + 1
-)
+length_compare["genomic_length"] = length_compare["end_pos"] - length_compare["start_pos"]
 length_compare["dna_length"] = length_compare["dna_seq"].fillna("").str.len()
-length_compare["protein_length"] = (
-    length_compare["protein_seq"].fillna("").str.len()
-)
 length_compare["length_diff"] = (
     length_compare["genomic_length"] - length_compare["dna_length"]
 )
-length_compare["protein_len_times3_minus_dna"] = (
-    (length_compare["protein_length"] * 3) - length_compare["dna_length"]
+length_compare["dna_last3"] = (
+    length_compare["dna_seq"].fillna("").str.upper().str[-3:]
+)
+length_compare["dna_ends_with_stop"] = (
+    length_compare["dna_seq"]
+    .fillna("")
+    .str.upper()
+    .str.endswith(("TAA", "TAG", "TGA"))
 )
 metric_left, metric_right = st.columns(2)
 comparable = length_compare[
@@ -130,20 +131,18 @@ metric_right.metric("TALEs with length discrepancy", len(length_compare))
 if length_compare.empty:
     st.info("No TALEs found with differing lengths under the current filters.")
 else:
-    st.caption("Genomic minus DNA length (+1)")
+    st.caption("Genomic minus DNA length")
     stats = (
         comparable[["genomic_length", "dna_length"]]
         .assign(
-            genomic_minus_dna_plus1=lambda df: df["genomic_length"] - df["dna_length"]
+            genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
         )
-        .groupby("genomic_minus_dna_plus1")
+        .groupby("genomic_minus_dna")
         .size()
         .reset_index(name="count")
     )
-    stats = stats[
-        stats["genomic_minus_dna_plus1"].isin(DISCREPANCY_LABELS.keys())
-    ]
-    stats["label"] = stats["genomic_minus_dna_plus1"].map(DISCREPANCY_LABELS)
+    stats = stats[stats["genomic_minus_dna"].isin(DISCREPANCY_LABELS.keys())]
+    stats["label"] = stats["genomic_minus_dna"].map(DISCREPANCY_LABELS)
     stats = (
         stats.set_index("label")
         .reindex(DISCREPANCY_ORDER, fill_value=0)
@@ -155,7 +154,7 @@ else:
         .encode(
             x=alt.X(
                 "label:N",
-                title="Genomic − DNA length (+1)",
+                title="Genomic − DNA length",
                 sort=DISCREPANCY_ORDER,
             ),
             y=alt.Y("count:Q", title="TALE count"),
@@ -179,14 +178,17 @@ else:
             [
                 "id",
                 "name",
+                "strain_id",
                 "start_pos",
                 "end_pos",
+                "strand",
                 "genomic_length",
                 "dna_length",
                 "length_diff",
-                "protein_len_times3_minus_dna",
+                "dna_last3",
+                "dna_ends_with_stop",
             ]
-        ].rename(columns={"length_diff": "genomic_minus_dna_plus1"}),
+        ].rename(columns={"length_diff": "genomic_minus_dna"}),
         use_container_width=True,
         height=260,
     )

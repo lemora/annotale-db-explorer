@@ -49,13 +49,13 @@ def parse_country(value: str | None) -> str | None:
     cleaned = str(value).strip()
     if not cleaned:
         return None
-    if cleaned in {"-", "Unknown", "Missing"}:
+    if cleaned.lower() in {"-", "unknown", "missing"}:
         return None
     if ":" in cleaned:
         cleaned = cleaned.split(":", 1)[0].strip()
     if "," in cleaned:
         cleaned = cleaned.split(",", 1)[0].strip()
-    if cleaned in {"-", "Unknown", "Missing"}:
+    if cleaned.lower() in {"-", "unknown", "missing"}:
         return None
     return cleaned
 
@@ -114,7 +114,51 @@ raw["strain_display"] = raw["strain_name"].fillna(raw["legacy_strain_name"]).fil
     "Unknown"
 )
 raw["country"] = raw["geo_tag"].apply(parse_country)
-located_mask = raw["country"].notna() & (raw["country"] != "")
+
+tax_filter = st.radio(
+    "Filter by taxonomy",
+    ["All", "Species", "Species + Pathovar"],
+    horizontal=True,
+    key="sample_map_tax_filter",
+)
+source = raw.copy()
+if tax_filter != "All":
+    tax_raw = load_sample_taxonomy()
+    if tax_raw.empty:
+        st.info("No taxonomy metadata available; showing all samples.")
+    else:
+        include_pathovar = tax_filter == "Species + Pathovar"
+        legacy_map = build_legacy_taxon_map(
+            tax_raw,
+            include_pathovar=include_pathovar,
+            legacy_col="legacy_strain_name",
+            sample_id_col="sample_id",
+        )
+        tax_raw["species_pathovar"] = apply_taxon_fallback(
+            tax_raw,
+            include_pathovar=include_pathovar,
+            legacy_map=legacy_map,
+            id_col="sample_id",
+            legacy_col="legacy_strain_name",
+        )
+        tax_raw["species_pathovar"] = tax_raw["species_pathovar"].str.replace(
+            "Xanthomonas", "X.", regex=False
+        )
+        taxon_options = ["All"] + sorted(
+            tax_raw["species_pathovar"].dropna().unique().tolist()
+        )
+        selected_taxon = st.selectbox(
+            tax_filter, taxon_options, key="sample_map_taxon"
+        )
+        if selected_taxon != "All":
+            allowed_ids = set(
+                tax_raw.loc[
+                    tax_raw["species_pathovar"] == selected_taxon, "sample_id"
+                ].tolist()
+            )
+            source = source[source["sample_id"].isin(allowed_ids)]
+
+located_mask = source["country"].notna() & (source["country"] != "")
 
 view_mode = st.radio(
     "View mode",
@@ -131,7 +175,7 @@ elif st.session_state["sample_map_prev_view"] != view_mode:
 map_placeholder = st.container()
 cutoff_year = None
 if view_mode == "Cumulative by year":
-    valid_years = raw.loc[located_mask, "year"].dropna().astype(int)
+    valid_years = source.loc[located_mask, "year"].dropna().astype(int)
     if valid_years.empty:
         st.info("No usable collection years found; showing static view instead.")
         view_mode = "Static"
@@ -143,7 +187,7 @@ if view_mode == "Cumulative by year":
             value=int(valid_years.max()),
         )
 
-filtered = raw.copy()
+filtered = source.copy()
 if view_mode == "Cumulative by year":
     if cutoff_year is not None:
         filtered = filtered[filtered["year"].notna() & (filtered["year"] <= cutoff_year)]
@@ -152,6 +196,13 @@ if view_mode == "Cumulative by year":
 
 missing_country = filtered[filtered["country"].isna() | (filtered["country"] == "")]
 located = filtered[filtered["country"].notna() & (filtered["country"] != "")]
+located = located[
+    ~located["country"]
+    .astype(str)
+    .str.strip()
+    .str.lower()
+    .isin({"unknown", "missing", "-"})
+]
 
 counts = (
     located.groupby("country")
