@@ -102,7 +102,7 @@ else:
     )
     top_n = max_strains if show_all else top_n
 
-families = family_totals.index.tolist()
+families = sorted(family_totals.index.tolist())
 strains = strain_totals.head(top_n).index.tolist()
 
 subset = raw[raw["family"].isin(families) & raw["strain"].isin(strains)]
