@@ -84,7 +84,6 @@ def parse_newick(text: str) -> Node | None:
 
         if peek() == ":":
             next_token()
-            # Skip branch length token, which may be empty or followed by delimiters
             if peek() not in (None, ",", ")", ";"):
                 _ = next_token()
         return node
@@ -104,6 +103,7 @@ def try_parse_newick(text: str) -> Node | None:
 
 def layout_tree(root: Node):
     import pandas as pd
+
     nodes: list[Node] = []
     edges = []
     next_leaf_x = 0

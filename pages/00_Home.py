@@ -1,26 +1,19 @@
 import streamlit as st
 
-from db_utils import load_families, load_strains, load_tales
+from utils.db import load_families, load_strains, load_tales
+from utils.page import init_page
 
-st.set_page_config(page_title="Home", layout="wide")
-
-st.sidebar.image("img/AnnoTALE_transp.png", width=140)
-
-st.session_state["active_page"] = "Home"
+init_page("Home", "Home")
 st.title("AnnoTALE DB Explorer")
 st.caption("Interactive explorer for the local `annotale.db` SQLite database.")
 
-hero_left, hero_right = st.columns([3, 1], vertical_alignment="top")
-with hero_left:
-    st.image("img/AnnoTALE_transp.png", width=220)
-    st.markdown(
-        """
-        Use the sidebar to move between pages for schema inspection, TALE distributions,
-        family trees, crosstabs, and sample geography.
-        """
-    )
-with hero_right:
-    st.empty()
+st.image("img/AnnoTALE_transp.png", width=220)
+st.markdown(
+    """
+    Use the sidebar to move between pages for schema inspection, TALE distributions,
+    family trees, crosstabs, and sample geography.
+    """
+)
 
 st.markdown("---")
 

@@ -2,8 +2,14 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from db_utils import load_families, load_tales, load_strains, query_df
-from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
+from utils.db import (
+    load_repeat_positions,
+    load_strains,
+    load_tales,
+    load_taxonomy_comparison_source,
+)
+from utils.page import init_page
+from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
 
 LENGTH_SOURCES = ["Genomic coordinates", "DNA sequence", "Protein sequence"]
 DISCREPANCY_LABELS = {
@@ -48,14 +54,9 @@ def add_length_column(df: pd.DataFrame, source: str) -> pd.DataFrame:
         df["length"] = df["protein_seq"].fillna("").str.len()
     return df
 
-st.set_page_config(page_title="Distributions", layout="wide")
-
-st.sidebar.image("img/AnnoTALE_transp.png", width=140)
-
-st.session_state["active_page"] = "Distributions"
+init_page("Distributions", "Distributions")
 st.title("Distributions and Summary")
 
-families = load_families()
 tales = load_tales()
 strains = load_strains()
 
@@ -90,9 +91,6 @@ st.caption("TALEs where DNA length differs from genomic length")
 length_compare = lengths.copy()
 length_compare["genomic_length"] = length_compare["end_pos"] - length_compare["start_pos"]
 length_compare["dna_length"] = length_compare["dna_seq"].fillna("").str.len()
-length_compare["length_diff"] = (
-    length_compare["genomic_length"] - length_compare["dna_length"]
-)
 length_compare["dna_last3"] = (
     length_compare["dna_seq"].fillna("").str.upper().str[-3:]
 )
@@ -260,11 +258,7 @@ else:
     st.altair_chart(strain_chart.properties(height=chart_height), use_container_width=True)
 
 st.subheader("RVD Counts by Repeat Position")
-pos_query = """
-SELECT repeat_ordinal AS position, rvd, tale_id
-FROM repeat
-"""
-pos_raw = query_df(pos_query)
+pos_raw = load_repeat_positions()
 
 if pos_raw.empty:
     st.warning("No repeat data available for position plot.")
@@ -383,24 +377,7 @@ st.caption(
     "and mapped to long-form taxa."
 )
 
-tax_raw = query_df(
-    """
-    SELECT s.id AS sample_id,
-           s.legacy_strain_name,
-           tx.ncbi_tax_id,
-           tx.raw_name AS taxon_name,
-           tx.species,
-           tx.pathovar,
-           CASE
-             WHEN s.legacy_strain_name IS NULL OR TRIM(s.legacy_strain_name) = '' THEN NULL
-             WHEN instr(TRIM(s.legacy_strain_name), ' ') > 0
-               THEN substr(TRIM(s.legacy_strain_name), 1, instr(TRIM(s.legacy_strain_name), ' ') - 1)
-             ELSE TRIM(s.legacy_strain_name)
-           END AS legacy_code
-    FROM samples s
-    LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
-    """
-)
+tax_raw = load_taxonomy_comparison_source()
 
 if tax_raw.empty:
     st.info("No sample/taxonomy data available.")

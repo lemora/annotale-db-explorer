@@ -3,40 +3,19 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_plotly_events import plotly_events
 
-from db_utils import load_sample_taxonomy, query_df
-from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
+from utils.db import load_sample_map_source, load_sample_taxonomy
+from utils.page import init_page
+from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
 
-st.set_page_config(page_title="Sample Map", layout="wide")
-
-st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+previous_page = st.session_state.get("active_page")
+init_page("Sample Map", "Sample Map")
 
 st.title("Sample Locations")
 st.caption("Country-level map; dot size indicates sample count.")
-current_page = "Sample Map"
-if st.session_state.get("active_page") != current_page:
+if previous_page != "Sample Map":
     st.session_state["selected_country"] = "All"
-st.session_state["active_page"] = current_page
 
-raw = query_df(
-    """
-    SELECT s.id AS sample_id,
-           s.legacy_strain_name,
-           s.strain_name,
-           s.geo_tag,
-           s.collection_date,
-           CASE
-             WHEN length(trim(s.collection_date)) = 4
-                  AND trim(s.collection_date) GLOB '[0-9][0-9][0-9][0-9]'
-               THEN CAST(substr(trim(s.collection_date), 1, 4) AS INTEGER)
-             WHEN trim(s.collection_date) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
-               THEN CAST(substr(trim(s.collection_date), 1, 4) AS INTEGER)
-             WHEN trim(s.collection_date) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
-               THEN CAST(substr(trim(s.collection_date), 1, 4) AS INTEGER)
-             ELSE NULL
-           END AS year
-    FROM samples s
-    """
-)
+raw = load_sample_map_source()
 
 if raw.empty:
     st.warning("No sample data available.")

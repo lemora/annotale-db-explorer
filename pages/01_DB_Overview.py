@@ -1,12 +1,9 @@
 import streamlit as st
 
-from db_utils import query_df, table_counts, table_schema
+from utils.db import table_counts, table_rows, table_schema
+from utils.page import init_page
 
-st.set_page_config(page_title="DB Overview", layout="wide")
-
-st.sidebar.image("img/AnnoTALE_transp.png", width=140)
-
-st.session_state["active_page"] = "DB Overview"
+init_page("DB Overview", "DB Overview")
 st.title("Database Overview")
 
 BUTTON_HIGHLIGHT_CSS = """
@@ -90,8 +87,8 @@ if table == "dmat":
 else:
     show_all_rows = st.checkbox("Show all rows", value=False)
     if show_all_rows:
-        sample = query_df(f"SELECT * FROM {table}")
+        sample = table_rows(table, limit=None)
     else:
         limit = st.slider("Sample size", 5, 200, 20, 5)
-        sample = query_df(f"SELECT * FROM {table} LIMIT {limit}")
+        sample = table_rows(table, limit=limit)
     st.dataframe(sample, use_container_width=True, height=300)

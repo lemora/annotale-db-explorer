@@ -1,14 +1,11 @@
 import altair as alt
 import streamlit as st
 
-from db_utils import query_df
-from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
+from utils.db import load_crosstab_source
+from utils.page import init_page
+from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
 
-st.set_page_config(page_title="Species/Pathovar/Strain vs. Family", layout="wide")
-
-st.sidebar.image("img/AnnoTALE_transp.png", width=140)
-
-st.session_state["active_page"] = "Crosstab"
+init_page("Species/Pathovar/Strain vs. Family", "Crosstab")
 st.title("Species/Pathovar/Strain vs. Family Cross-Tab")
 
 view = st.radio(
@@ -19,22 +16,7 @@ view = st.radio(
     key="crosstab_view",
 )
 
-query = """
-SELECT fm.family_id AS family,
-       s.id AS sample_id,
-       s.strain_name,
-       s.legacy_strain_name,
-       tx.species,
-       tx.pathovar,
-       tx.raw_name AS taxon_name
-FROM tale_family_member fm
-JOIN tale t ON t.id = fm.tale_id
-LEFT JOIN assembly a ON a.id = t.assembly_id
-LEFT JOIN samples s ON s.id = a.sample_id
-LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
-"""
-
-raw = query_df(query)
+raw = load_crosstab_source()
 
 if raw.empty:
     st.warning("No family/strain data available.")

@@ -3,15 +3,20 @@ import html
 import streamlit as st
 import streamlit.components.v1 as components
 
-from db_utils import load_families, load_family_members, load_tales, query_df
-from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
-from tree_utils import layout_tree, try_parse_newick
+from utils.db import (
+    load_families,
+    load_family_members,
+    load_family_rvd_counts,
+    load_family_species_pathovar,
+    load_family_tale_rows,
+    load_tale_rvds,
+    load_tales,
+)
+from utils.page import init_page
+from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
+from utils.tree import layout_tree, try_parse_newick
 
-st.set_page_config(page_title="TALE Families", layout="wide")
-
-st.sidebar.image("img/AnnoTALE_transp.png", width=140)
-
-st.session_state["active_page"] = "TALE Families"
+init_page("TALE Families", "TALE Families")
 st.title("TALE Families")
 
 INNER_SPACING = 38.0
@@ -423,40 +428,11 @@ if selected_event_id is not None:
 
 with left:
     st.subheader("Family TALEs")
-    tale_rows = query_df(
-        """
-        SELECT t.id AS id,
-               t.legacy_name AS name,
-               t.is_pseudo AS is_pseudo,
-               MAX(r.repeat_ordinal) + 1 AS repeat_len
-        FROM tale_family_member fm
-        JOIN tale t ON t.id = fm.tale_id
-        LEFT JOIN repeat r ON r.tale_id = t.id
-        WHERE fm.family_id = ?
-        GROUP BY t.id, t.legacy_name, t.is_pseudo
-        ORDER BY t.id
-        """,
-        params=[family_name],
-    )
+    tale_rows = load_family_tale_rows(family_name)
     render_tale_table(tale_rows, selected_id)
 
     st.subheader("TALEs by Species + Pathovar")
-    sp_raw = query_df(
-        """
-        SELECT s.id AS sample_id,
-               s.legacy_strain_name,
-               tx.species,
-               tx.pathovar,
-               tx.raw_name AS taxon_name
-        FROM tale_family_member fm
-        JOIN tale t ON t.id = fm.tale_id
-        LEFT JOIN assembly a ON a.id = t.assembly_id
-        LEFT JOIN samples s ON s.id = a.sample_id
-        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
-        WHERE fm.family_id = ?
-        """,
-        params=[family_name],
-    )
+    sp_raw = load_family_species_pathovar(family_name)
     if sp_raw.empty:
         st.info("No species/pathovar data for this family.")
     else:
@@ -514,30 +490,8 @@ with left:
         disabled=selected_is_pseudo,
     )
 
-    rvd_pos_all = query_df(
-        """
-        SELECT r.repeat_ordinal AS position, r.rvd AS rvd, COUNT(*) AS count
-        FROM repeat r
-        JOIN tale t ON t.id = r.tale_id
-        JOIN tale_family_member fm ON fm.tale_id = t.id
-        WHERE fm.family_id = ?
-        GROUP BY r.repeat_ordinal, r.rvd
-        ORDER BY r.repeat_ordinal
-        """,
-        params=[family_name],
-    )
-    rvd_pos_filtered = query_df(
-        """
-        SELECT r.repeat_ordinal AS position, r.rvd AS rvd, COUNT(*) AS count
-        FROM repeat r
-        JOIN tale t ON t.id = r.tale_id
-        JOIN tale_family_member fm ON fm.tale_id = t.id
-        WHERE fm.family_id = ? AND t.is_pseudo = 0
-        GROUP BY r.repeat_ordinal, r.rvd
-        ORDER BY r.repeat_ordinal
-        """,
-        params=[family_name],
-    )
+    rvd_pos_all = load_family_rvd_counts(family_name, exclude_pseudo=False)
+    rvd_pos_filtered = load_family_rvd_counts(family_name, exclude_pseudo=True)
     rvd_pos = rvd_pos_filtered if exclude_pseudo_plots else rvd_pos_all
 
     if rvd_pos.empty:
@@ -577,15 +531,7 @@ with left:
         if selected_id is None:
             st.info("Select a TALE to show its RVD sequence.")
         else:
-            tale_rvds = query_df(
-                """
-                SELECT r.repeat_ordinal AS position, r.rvd AS rvd
-                FROM repeat r
-                WHERE r.tale_id = ?
-                ORDER BY r.repeat_ordinal
-                """,
-                params=[int(selected_id)],
-            )
+            tale_rvds = load_tale_rvds(int(selected_id))
             if tale_rvds.empty:
                 st.info("No repeat data for the selected TALE.")
             else:

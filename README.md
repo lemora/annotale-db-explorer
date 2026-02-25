@@ -31,11 +31,10 @@ Then open the local URL shown by Streamlit (usually `http://localhost:8501`).
 
 ## Project Structure
 
-- `app.py`: Streamlit entrypoint (home page)
-- `pages/`: multi-page Streamlit views
-- `db_utils.py`: database connection and reusable query helpers
-- `taxonomy_utils.py`: taxonomy fallback and mapping helpers
-- `tree_utils.py`: Newick parsing and tree layout helpers
+- `app.py`: Streamlit entrypoint and page navigation
+- `pages/`: page rendering and page-local logic
+- `utils/db.py`: centralized SQL/database query layer
+- `utils/`: shared helpers (page setup, taxonomy helpers, tree helpers)
 - `annotale.db`: SQLite data source
 
 ## Troubleshooting
