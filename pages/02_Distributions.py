@@ -375,3 +375,106 @@ else:
             .transform_calculate(percent="datum.count / datum.total")
         )
         st.altair_chart(pos_chart.properties(height=400), use_container_width=True)
+
+st.markdown("---")
+st.subheader("Taxonomy Comparison (Legacy vs NCBI)")
+st.caption(
+    "Legacy taxonomy is inferred from the first token of `samples.legacy_strain_name` "
+    "and mapped to long-form taxa."
+)
+
+tax_raw = query_df(
+    """
+    SELECT s.id AS sample_id,
+           s.legacy_strain_name,
+           tx.ncbi_tax_id,
+           tx.raw_name AS taxon_name,
+           tx.species,
+           tx.pathovar,
+           CASE
+             WHEN s.legacy_strain_name IS NULL OR TRIM(s.legacy_strain_name) = '' THEN NULL
+             WHEN instr(TRIM(s.legacy_strain_name), ' ') > 0
+               THEN substr(TRIM(s.legacy_strain_name), 1, instr(TRIM(s.legacy_strain_name), ' ') - 1)
+             ELSE TRIM(s.legacy_strain_name)
+           END AS legacy_code
+    FROM samples s
+    LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
+    """
+)
+
+if tax_raw.empty:
+    st.info("No sample/taxonomy data available.")
+else:
+    def format_ncbi_taxon(row: pd.Series) -> str:
+        species = row.get("species")
+        pathovar = row.get("pathovar")
+        if pd.notna(species) and str(species).strip():
+            if pd.notna(pathovar) and str(pathovar).strip():
+                return f"{species} pv. {pathovar}"
+            return str(species)
+        taxon_name = row.get("taxon_name")
+        if pd.notna(taxon_name) and str(taxon_name).strip():
+            return str(taxon_name)
+        return "Unknown"
+
+    tax_raw["ncbi_taxon"] = tax_raw.apply(format_ncbi_taxon, axis=1)
+    seed = (
+        tax_raw.groupby(["legacy_code", "ncbi_taxon"])
+        .size()
+        .reset_index(name="count")
+        .sort_values(["legacy_code", "count"], ascending=[True, False])
+        .groupby("legacy_code")
+        .head(1)
+    )
+    legacy_map = dict(seed.set_index("legacy_code")["ncbi_taxon"].to_dict())
+    tax_raw["legacy_taxon"] = tax_raw["legacy_code"].map(legacy_map)
+    tax_raw["legacy_taxon"] = tax_raw["legacy_taxon"].fillna("Unknown legacy taxonomy")
+    tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].where(
+        tax_raw["ncbi_taxon"] != "Unknown", tax_raw["legacy_taxon"]
+    )
+    tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].replace(
+        "Unknown legacy taxonomy", "Unknown"
+    )
+    tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].fillna("Unknown")
+
+    mismatches = tax_raw[
+        (tax_raw["legacy_taxon"] != "Unknown legacy taxonomy")
+        & (tax_raw["ncbi_taxon"] != "Unknown")
+        & (tax_raw["legacy_taxon"] != tax_raw["ncbi_taxon"])
+    ].copy()
+
+    if mismatches.empty:
+        st.info("No mismatches found between legacy and NCBI taxonomy.")
+    else:
+        st.caption("Taxonomy mismatch overview")
+        mismatch_counts = (
+            mismatches.groupby(["legacy_taxon", "ncbi_taxon"])
+            .size()
+            .reset_index(name="count")
+            .sort_values("count", ascending=False)
+        )
+        mismatch_chart = (
+            alt.Chart(mismatch_counts)
+            .mark_bar()
+            .encode(
+                y=alt.Y(
+                    "legacy_taxon:N",
+                    sort="-x",
+                    title="Legacy taxonomy",
+                    axis=alt.Axis(labelLimit=300),
+                ),
+                x=alt.X("count:Q", title="Mismatch count"),
+                color=alt.Color("ncbi_taxon:N", title="NCBI taxonomy"),
+                tooltip=["legacy_taxon:N", "ncbi_taxon:N", "count:Q"],
+            )
+        )
+        st.altair_chart(mismatch_chart.properties(height=320), use_container_width=True)
+
+        st.caption("Samples with differing taxonomy")
+        mismatch_rows = (
+            mismatches.groupby(["legacy_taxon", "ncbi_taxon", "ncbi_tax_id"])
+            .size()
+            .reset_index(name="count")
+            .sort_values("count", ascending=False)
+        )
+        st.dataframe(mismatch_rows, use_container_width=True, height=320)

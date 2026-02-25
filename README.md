@@ -1,13 +1,21 @@
-# Annotale DB Explorer
+# AnnoTALE DB Explorer
 
-Streamlit app to explore the `annotale.db` SQLite database with interactive views.
+Streamlit app for interactive exploration of the local `annotale.db` SQLite database.
+
+## What You Can Do
+
+- Inspect database tables, schemas, and sample rows.
+- Explore TALE and family-level distributions, including taxonomy mismatch summaries.
+- Navigate TALE family trees with linked TALE selection.
+- Compare family counts by species/pathovar/strain.
+- Visualize sample geography on a country-level map.
 
 ## Requirements
 
-- Python 3.10+
-- `annotale.db` in the repo root
+- Python 3.10 or newer
+- `annotale.db` file in the repository root
 
-Install dependencies:
+## Setup
 
 ```bash
 pip install -r requirements.txt
@@ -19,14 +27,19 @@ pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-## Pages
+Then open the local URL shown by Streamlit (usually `http://localhost:8501`).
 
-- **Overview**: tables and schemas, quick row samples
-- **Distributions**: family sizes, TALE lengths, TALEs by strain, RVD composition
-- **Family Trees**: interactive Vega-Lite tree with clickable leaf selection
-- **Crosstab**: strain vs. family heatmap
+## Project Structure
 
-## Notes
+- `app.py`: Streamlit entrypoint (home page)
+- `pages/`: multi-page Streamlit views
+- `db_utils.py`: database connection and reusable query helpers
+- `taxonomy_utils.py`: taxonomy fallback and mapping helpers
+- `tree_utils.py`: Newick parsing and tree layout helpers
+- `annotale.db`: SQLite data source
 
-- Family tree selection highlights the clicked TALE leaf and shows the selected ID/name above the chart.
-- Leaf tooltips show TALE ID and name only.
+## Troubleshooting
+
+- If the app starts but shows no data, verify `annotale.db` exists at repo root.
+- If dependencies are missing, rerun `pip install -r requirements.txt`.
+- If Streamlit cache looks stale after DB updates, clear cache from Streamlit settings and rerun.
