@@ -277,6 +277,7 @@ else:
         how="left",
         suffixes=("", "_tale"),
     )
+    plot_source["position"] = plot_source["position"] + 1
     plot_source = plot_source.merge(
         strains[["id", "species", "pathovar", "taxon_name", "legacy_strain_name"]],
         left_on="strain_id",

@@ -492,6 +492,10 @@ with left:
 
     rvd_pos_all = load_family_rvd_counts(family_name, exclude_pseudo=False)
     rvd_pos_filtered = load_family_rvd_counts(family_name, exclude_pseudo=True)
+    if not rvd_pos_all.empty:
+        rvd_pos_all["position"] = rvd_pos_all["position"] + 1
+    if not rvd_pos_filtered.empty:
+        rvd_pos_filtered["position"] = rvd_pos_filtered["position"] + 1
     rvd_pos = rvd_pos_filtered if exclude_pseudo_plots else rvd_pos_all
 
     if rvd_pos.empty:
@@ -535,6 +539,7 @@ with left:
             if tale_rvds.empty:
                 st.info("No repeat data for the selected TALE.")
             else:
+                tale_rvds["position"] = tale_rvds["position"] + 1
                 tale_base = alt.Chart(tale_rvds).encode(
                     x=alt.X(
                         "position:O",
