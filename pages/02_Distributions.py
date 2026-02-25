@@ -200,11 +200,12 @@ else:
         suffixes=("", "_strain"),
     )
     view = st.radio(
-        "",
+        "TALE distribution view",
         ["Species", "Species + Pathovar", "Strain"],
         index=0,
         horizontal=True,
         key="dist_view",
+        label_visibility="collapsed",
     )
     if view == "Strain":
         tales_with_strain["strain"] = tales_with_strain["name_strain"].fillna("Unknown")

@@ -3,7 +3,7 @@ import html
 import streamlit as st
 import streamlit.components.v1 as components
 
-from db_utils import load_families, load_tales, query_df
+from db_utils import load_families, load_family_members, load_tales, query_df
 from taxonomy_utils import apply_taxon_fallback, build_legacy_taxon_map
 from tree_utils import layout_tree, try_parse_newick
 
@@ -182,29 +182,127 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
     components.html(table_html, height=320)
 
 
+def set_selected_tale_id(tale_id: int | None) -> None:
+    if tale_id is None:
+        st.session_state["selected_tale_id"] = None
+        if "tale_id" in st.query_params:
+            del st.query_params["tale_id"]
+        return
+    selected = int(tale_id)
+    st.session_state["selected_tale_id"] = selected
+    st.query_params["tale_id"] = str(selected)
+
+
 families = load_families()
 families = families[families["tree_newick"].fillna("").str.strip() != ""]
 if families.empty:
     st.warning("No families found.")
     st.stop()
 
+family_options = sorted(families["name"].tolist())
+family_sizes = dict(zip(families["name"], families["member_count"]))
+tales_df = load_tales()
+
+family_members = load_family_members()
+family_members = family_members[family_members["family_id"].isin(family_options)].copy()
+if not family_members.empty:
+    family_members["tale_id"] = family_members["tale_id"].astype(int)
+    family_members = family_members.sort_values(["family_id", "tale_id"])
+
+family_to_tale_ids = (
+    family_members.groupby("family_id")["tale_id"].apply(list).to_dict()
+    if not family_members.empty
+    else {}
+)
+tale_to_family = (
+    family_members.drop_duplicates("tale_id").set_index("tale_id")["family_id"].to_dict()
+    if not family_members.empty
+    else {}
+)
+
+if tales_df.empty:
+    all_tale_options = []
+    tale_name_by_id = {}
+else:
+    all_tale_rows = tales_df[["id", "name"]].copy()
+    all_tale_rows["id"] = all_tale_rows["id"].astype(int)
+    if not family_members.empty:
+        all_tale_rows = all_tale_rows[all_tale_rows["id"].isin(family_members["tale_id"])]
+    all_tale_rows = all_tale_rows.sort_values("id")
+    all_tale_options = all_tale_rows["id"].tolist()
+    tale_name_by_id = dict(zip(all_tale_rows["id"], all_tale_rows["name"].fillna("")))
+
+if "family_idx" not in st.session_state:
+    st.session_state["family_idx"] = 0
+st.session_state["family_idx"] = max(
+    0, min(st.session_state["family_idx"], len(family_options) - 1)
+)
+
+selected_from_query = st.query_params.get("tale_id")
+if selected_from_query:
+    try:
+        selected_query_id = int(selected_from_query)
+        if selected_query_id in tale_to_family:
+            set_selected_tale_id(selected_query_id)
+            st.session_state["family_idx"] = family_options.index(tale_to_family[selected_query_id])
+    except ValueError:
+        pass
+
+selected_id = st.session_state.get("selected_tale_id")
+if selected_id is not None:
+    try:
+        selected_id = int(selected_id)
+    except ValueError:
+        selected_id = None
+if selected_id in tale_to_family:
+    st.session_state["family_idx"] = family_options.index(tale_to_family[selected_id])
+else:
+    selected_id = None
+    set_selected_tale_id(None)
+
 left, right = st.columns([2, 3])
 
 with left:
-    family_options = sorted(families["name"].tolist())
-    family_sizes = dict(zip(families["name"], families["member_count"]))
-    if "family_idx" not in st.session_state:
-        st.session_state["family_idx"] = 0
-    st.session_state["family_idx"] = max(
-        0, min(st.session_state["family_idx"], len(family_options) - 1)
-    )
+    current_family_name = family_options[st.session_state["family_idx"]]
+    if all_tale_options:
+        current_family_tales = family_to_tale_ids.get(current_family_name, [])
+        control_selected_tale_id = selected_id
+        if control_selected_tale_id not in all_tale_options:
+            if current_family_tales:
+                control_selected_tale_id = current_family_tales[0]
+            else:
+                control_selected_tale_id = all_tale_options[0]
+            set_selected_tale_id(control_selected_tale_id)
+            selected_id = control_selected_tale_id
+        selected_tale = st.selectbox(
+            "Select a TALE:",
+            all_tale_options,
+            index=all_tale_options.index(control_selected_tale_id),
+            format_func=lambda tale_id: f"{tale_id}: {tale_name_by_id.get(tale_id, '')}",
+        )
+        if selected_tale != control_selected_tale_id:
+            set_selected_tale_id(selected_tale)
+            selected_family_for_tale = tale_to_family.get(selected_tale, current_family_name)
+            if selected_family_for_tale in family_options:
+                st.session_state["family_idx"] = family_options.index(selected_family_for_tale)
+            st.rerun()
+    st.markdown("---")
+
+    def select_first_tale_for_family(family_name: str) -> None:
+        family_tales = family_to_tale_ids.get(family_name, [])
+        set_selected_tale_id(family_tales[0] if family_tales else None)
+
     prev_col, next_col = st.columns(2)
     current_idx = st.session_state["family_idx"]
-    if prev_col.button("<- Previous"):
-        st.session_state["family_idx"] = (current_idx - 1) % len(family_options)
+    if prev_col.button("<- Previous Family"):
+        new_idx = (current_idx - 1) % len(family_options)
+        st.session_state["family_idx"] = new_idx
+        select_first_tale_for_family(family_options[new_idx])
         st.rerun()
-    if next_col.button("Next ->"):
-        st.session_state["family_idx"] = (current_idx + 1) % len(family_options)
+    if next_col.button("Next Family ->"):
+        new_idx = (current_idx + 1) % len(family_options)
+        st.session_state["family_idx"] = new_idx
+        select_first_tale_for_family(family_options[new_idx])
         st.rerun()
     selected_family = st.selectbox(
         "Family",
@@ -214,12 +312,21 @@ with left:
     )
     if family_options[st.session_state["family_idx"]] != selected_family:
         st.session_state["family_idx"] = family_options.index(selected_family)
-    family_name = selected_family
+        select_first_tale_for_family(selected_family)
+        st.rerun()
+    family_name = family_options[st.session_state["family_idx"]]
 
 row = families[families["name"] == family_name].iloc[0]
-if st.session_state.get("prev_family") != family_name:
-    st.session_state["selected_tale_id"] = None
-    st.session_state["prev_family"] = family_name
+family_tales = family_to_tale_ids.get(family_name, [])
+selected_id = st.session_state.get("selected_tale_id")
+if selected_id is not None:
+    try:
+        selected_id = int(selected_id)
+    except ValueError:
+        selected_id = None
+if selected_id not in family_tales:
+    selected_id = family_tales[0] if family_tales else None
+    set_selected_tale_id(selected_id)
 
 with left:
     col1, col2 = st.columns(2)
@@ -240,7 +347,6 @@ nodes_df.loc[nodes_df["is_leaf"], "x_plot"] = max_depth * INNER_SPACING + LEAF_E
 
 nodes_df["tale_id"] = nodes_df["name"].apply(to_int)
 
-tales_df = load_tales()
 if not tales_df.empty:
     tales_df = tales_df[["id", "name", "is_pseudo"]].rename(columns={"name": "tale_name"})
     nodes_df = nodes_df.merge(tales_df, left_on="tale_id", right_on="id", how="left")
@@ -248,23 +354,9 @@ else:
     nodes_df["tale_name"] = None
     nodes_df["is_pseudo"] = 0
 
-selected_from_query = st.query_params.get("tale_id")
-if selected_from_query:
-    try:
-        st.session_state["selected_tale_id"] = int(selected_from_query)
-    except ValueError:
-        pass
-
-selected_id = st.session_state.get("selected_tale_id")
-if selected_id is not None:
-    try:
-        selected_id = int(selected_id)
-    except ValueError:
-        selected_id = None
-
 if selected_id is not None and selected_id not in nodes_df["tale_id"].dropna().tolist():
-    selected_id = None
-    st.session_state["selected_tale_id"] = None
+    selected_id = family_tales[0] if family_tales else None
+    set_selected_tale_id(selected_id)
 
 edge_points = build_edge_points(nodes_df, edges_df, selected_id)
 chart_height = max(TREE_MIN_HEIGHT, int(nodes_df["x"].max() * 18))
@@ -323,7 +415,7 @@ with right:
 
 selected_event_id = extract_selected_id(event)
 if selected_event_id is not None:
-    st.session_state["selected_tale_id"] = int(selected_event_id)
+    set_selected_tale_id(int(selected_event_id))
     try:
         st.rerun()
     except AttributeError:
