@@ -29,6 +29,20 @@ python -m streamlit run app.py
 
 Then open the local URL shown by Streamlit (usually `http://localhost:8501`).
 
+## Run with Docker
+
+```bash
+docker compose up --build -d
+```
+
+Open `http://localhost:8501`.
+
+To stop:
+
+```bash
+docker compose down
+```
+
 ## Project Structure
 
 - `app.py`: Streamlit entrypoint and page navigation
