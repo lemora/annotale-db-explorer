@@ -1,6 +1,6 @@
 # AnnoTALE DB Explorer
 
-Streamlit app for interactive exploration of the local `annotale.db` SQLite database.
+Streamlit app for interactive exploration of the local `data/annotale.db` SQLite database.
 
 ## What You Can Do
 
@@ -13,7 +13,7 @@ Streamlit app for interactive exploration of the local `annotale.db` SQLite data
 ## Requirements
 
 - Python 3.10 or newer
-- `annotale.db` file in the repository root
+- `data/annotale.db` file in the repository
 
 ## Setup
 
@@ -35,10 +35,10 @@ Then open the local URL shown by Streamlit (usually `http://localhost:8501`).
 - `pages/`: page rendering and page-local logic
 - `utils/db.py`: centralized SQL/database query layer
 - `utils/`: shared helpers (page setup, taxonomy helpers, tree helpers)
-- `annotale.db`: SQLite data source
+- `data/annotale.db`: SQLite data source
 
 ## Troubleshooting
 
-- If the app starts but shows no data, verify `annotale.db` exists at repo root.
+- If the app starts but shows no data, verify `data/annotale.db` exists.
 - If dependencies are missing, rerun `pip install -r requirements.txt`.
 - If Streamlit cache looks stale after DB updates, clear cache from Streamlit settings and rerun.

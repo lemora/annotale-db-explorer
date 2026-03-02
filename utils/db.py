@@ -7,12 +7,13 @@ from typing import Iterable
 import pandas as pd
 import streamlit as st
 
-DB_PATH = Path(__file__).resolve().parent.parent / "annotale.db"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DB_PATH = REPO_ROOT / "data" / "annotale.db"
 
 
 @st.cache_resource
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(f"file:{DB_PATH}?mode=rw", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 

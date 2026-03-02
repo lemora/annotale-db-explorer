@@ -3,9 +3,9 @@ import streamlit as st
 from utils.db import load_families, load_strains, load_tales
 from utils.page import init_page
 
-init_page("Home", "Home")
+init_page("Home", "Home", require_db=False)
 st.title("AnnoTALE DB Explorer")
-st.caption("Interactive explorer for the local `annotale.db` SQLite database.")
+st.caption("Interactive explorer for the AnnoTALE SQLite database.")
 
 st.image("img/AnnoTALE_transp.png", width=220)
 st.markdown(
@@ -18,16 +18,18 @@ st.markdown(
 st.markdown("---")
 
 st.subheader("Database Snapshot")
-try:
-    tales = load_tales()
-    families = load_families()
-    strains = load_strains()
-    m1, m2, m3 = st.columns(3)
-    m1.metric("TALEs", f"{len(tales):,}")
-    m2.metric("Families", f"{len(families):,}")
-    m3.metric("Samples/Strains", f"{len(strains):,}")
-except Exception as exc:  # noqa: BLE001
-    st.warning(f"Could not load database summary: {exc}")
+
+def metric_count(loader) -> str:
+    try:
+        return f"{len(loader()):,}"
+    except Exception:  # noqa: BLE001
+        return "-"
+
+
+m1, m2, m3 = st.columns(3)
+m1.metric("TALEs", metric_count(load_tales))
+m2.metric("Families", metric_count(load_families))
+m3.metric("Samples/Strains", metric_count(load_strains))
 
 st.markdown("---")
 st.subheader("Pages")
