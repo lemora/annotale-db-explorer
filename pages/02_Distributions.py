@@ -9,7 +9,11 @@ from utils.db import (
     load_taxonomy_comparison_source,
 )
 from utils.page import init_page
-from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
+from utils.taxonomy import (
+    abbreviate_taxon_labels,
+    apply_taxon_fallback,
+    build_legacy_taxon_map,
+)
 
 LENGTH_SOURCES = ["Genomic coordinates", "DNA sequence", "Protein sequence"]
 DISCREPANCY_LABELS = {
@@ -118,7 +122,7 @@ with st.expander(
     if length_compare.empty:
         st.info("No TALEs found with differing lengths under the current filters.")
     else:
-        st.caption("Genomic minus DNA length")
+        st.caption("Genomic (e-s) minus DNA length")
         stats = (
             comparable[["genomic_length", "dna_length"]]
             .assign(
@@ -141,7 +145,7 @@ with st.expander(
             .encode(
                 x=alt.X(
                     "label:N",
-                    title="Genomic − DNA length",
+                    title="Genomic (e-s) − DNA length",
                     sort=DISCREPANCY_ORDER,
                 ),
                 y=alt.Y("count:Q", title="TALE count"),
@@ -175,7 +179,7 @@ with st.expander(
                     "dna_last3",
                     "dna_ends_with_stop",
                 ]
-            ],
+            ].rename(columns={"genomic_length": "genomic_length (e-s)"}),
             use_container_width=True,
             height=260,
         )
@@ -227,9 +231,9 @@ else:
             id_col="strain_id",
             legacy_col="legacy_strain_name",
         )
-        tales_with_strain["species_pathovar"] = tales_with_strain[
-            "species_pathovar"
-        ].str.replace("Xanthomonas", "X.", regex=False)
+        tales_with_strain["species_pathovar"] = abbreviate_taxon_labels(
+            tales_with_strain["species_pathovar"]
+        )
         y_field = "species_pathovar"
         y_title = "Species" if view == "Species" else "Species + Pathovar"
 
@@ -307,8 +311,8 @@ else:
                 id_col="strain_id",
                 legacy_col="legacy_strain_name",
             )
-            plot_source["species_pathovar"] = plot_source["species_pathovar"].str.replace(
-                "Xanthomonas", "X.", regex=False
+            plot_source["species_pathovar"] = abbreviate_taxon_labels(
+                plot_source["species_pathovar"]
             )
             taxon_options = ["All"] + sorted(
                 plot_source["species_pathovar"].dropna().unique().tolist()

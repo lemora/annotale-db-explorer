@@ -3,7 +3,11 @@ import streamlit as st
 
 from utils.db import load_crosstab_source
 from utils.page import init_page
-from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
+from utils.taxonomy import (
+    abbreviate_taxon_labels,
+    apply_taxon_fallback,
+    build_legacy_taxon_map,
+)
 
 init_page("Species/Pathovar/Strain vs. Family", "Crosstab")
 st.title("Species/Pathovar/Strain vs. Family Cross-Tab")
@@ -23,15 +27,15 @@ if raw.empty:
     st.stop()
 
 sample_tax = raw.drop_duplicates(subset=["sample_id"])
-legacy_map = build_legacy_taxon_map(
-    sample_tax,
-    include_pathovar=True,
-    legacy_col="legacy_strain_name",
-    sample_id_col="sample_id",
-)
 
 if view != "Strain":
     include_pathovar = view == "Species + Pathovar"
+    legacy_map = build_legacy_taxon_map(
+        sample_tax,
+        include_pathovar=include_pathovar,
+        legacy_col="legacy_strain_name",
+        sample_id_col="sample_id",
+    )
     raw["strain"] = apply_taxon_fallback(
         raw,
         include_pathovar=include_pathovar,
@@ -41,6 +45,12 @@ if view != "Strain":
     )
     raw = raw.groupby(["strain", "family"]).size().reset_index(name="count")
 else:
+    legacy_map = build_legacy_taxon_map(
+        sample_tax,
+        include_pathovar=True,
+        legacy_col="legacy_strain_name",
+        sample_id_col="sample_id",
+    )
     strain_name = raw["strain_name"].fillna("").str.strip()
     legacy_name = raw["legacy_strain_name"].fillna("").str.strip()
     raw["strain"] = strain_name.where(strain_name != "", legacy_name)
@@ -58,7 +68,7 @@ else:
         name="count"
     )
 
-raw["strain"] = raw["strain"].str.replace("Xanthomonas", "X.", regex=False)
+raw["strain"] = abbreviate_taxon_labels(raw["strain"])
 
 family_totals = raw.groupby("family")["count"].sum().sort_values(ascending=False)
 strain_totals = raw.groupby("strain")["count"].sum().sort_values(ascending=False)

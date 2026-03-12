@@ -24,6 +24,10 @@ def format_taxon(
     return base.fillna(taxon_name)
 
 
+def abbreviate_taxon_labels(series: pd.Series) -> pd.Series:
+    return series.str.replace("Xanthomonas", "X.", regex=False)
+
+
 def build_legacy_taxon_map(
     df: pd.DataFrame,
     include_pathovar: bool,

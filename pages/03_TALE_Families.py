@@ -13,7 +13,11 @@ from utils.db import (
     load_tales,
 )
 from utils.page import init_page
-from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
+from utils.taxonomy import (
+    abbreviate_taxon_labels,
+    apply_taxon_fallback,
+    build_legacy_taxon_map,
+)
 from utils.tree import layout_tree, try_parse_newick
 
 init_page("TALE Families", "TALE Families")
@@ -578,8 +582,8 @@ with left:
             .reset_index(name="count")
             .sort_values("count", ascending=False)
         )
-        sp_counts["species_pathovar"] = sp_counts["species_pathovar"].str.replace(
-            "Xanthomonas", "X.", regex=False
+        sp_counts["species_pathovar"] = abbreviate_taxon_labels(
+            sp_counts["species_pathovar"]
         )
         sp_chart = (
             alt.Chart(sp_counts)

@@ -5,7 +5,11 @@ from streamlit_plotly_events import plotly_events
 
 from utils.db import load_sample_map_source, load_sample_taxonomy
 from utils.page import init_page
-from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
+from utils.taxonomy import (
+    abbreviate_taxon_labels,
+    apply_taxon_fallback,
+    build_legacy_taxon_map,
+)
 
 previous_page = st.session_state.get("active_page")
 init_page("Sample Map", "Sample Map")
@@ -120,8 +124,8 @@ if tax_filter != "All":
             id_col="sample_id",
             legacy_col="legacy_strain_name",
         )
-        tax_raw["species_pathovar"] = tax_raw["species_pathovar"].str.replace(
-            "Xanthomonas", "X.", regex=False
+        tax_raw["species_pathovar"] = abbreviate_taxon_labels(
+            tax_raw["species_pathovar"]
         )
         taxon_options = ["All"] + sorted(
             tax_raw["species_pathovar"].dropna().unique().tolist()
@@ -298,8 +302,8 @@ else:
             id_col="sample_id",
             legacy_col="legacy_strain_name",
         )
-        tax_filtered["species_pathovar"] = tax_filtered["species_pathovar"].str.replace(
-            "Xanthomonas", "X.", regex=False
+        tax_filtered["species_pathovar"] = abbreviate_taxon_labels(
+            tax_filtered["species_pathovar"]
         )
         sp_counts = (
             tax_filtered["species_pathovar"]

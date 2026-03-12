@@ -43,14 +43,14 @@ with p1:
 
         **Distributions**  
         Explore TALE lengths, family sizes, RVD composition, and taxonomy comparison.
-
-        **TALE Families**  
-        Navigate family trees and inspect selected TALE details.
         """
     )
 with p2:
     st.markdown(
         """
+        **TALE Families**  
+        Navigate family trees and inspect selected TALE details.
+
         **Crosstab**  
         Compare TALE family counts across species/pathovars/strains.
 
