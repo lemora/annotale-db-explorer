@@ -87,95 +87,98 @@ len_chart = (
 
 st.altair_chart(len_chart.properties(height=300), use_container_width=True)
 
-st.caption("TALEs where DNA length differs from genomic length")
-length_compare = lengths.copy()
-length_compare["genomic_length"] = length_compare["end_pos"] - length_compare["start_pos"]
-length_compare["dna_length"] = length_compare["dna_seq"].fillna("").str.len()
-length_compare["dna_last3"] = (
-    length_compare["dna_seq"].fillna("").str.upper().str[-3:]
-)
-length_compare["dna_ends_with_stop"] = (
-    length_compare["dna_seq"]
-    .fillna("")
-    .str.upper()
-    .str.endswith(("TAA", "TAG", "TGA"))
-)
-metric_left, metric_right = st.columns(2)
-comparable = length_compare[
-    length_compare["genomic_length"].notnull()
-    & (length_compare["genomic_length"] > 0)
-    & (length_compare["dna_length"] > 0)
-]
-length_compare = comparable[comparable["genomic_length"] != comparable["dna_length"]]
-table_data = comparable.assign(
-    genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
-)
-metric_left.metric("Number of TALEs", len(comparable))
-metric_right.metric("TALEs with length discrepancy", len(length_compare))
-if length_compare.empty:
-    st.info("No TALEs found with differing lengths under the current filters.")
-else:
-    st.caption("Genomic minus DNA length")
-    stats = (
-        comparable[["genomic_length", "dna_length"]]
-        .assign(
-            genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
+with st.expander(
+    "TALEs where DNA length differs from genomic length",
+    expanded=False,
+):
+    length_compare = lengths.copy()
+    length_compare["genomic_length"] = length_compare["end_pos"] - length_compare["start_pos"]
+    length_compare["dna_length"] = length_compare["dna_seq"].fillna("").str.len()
+    length_compare["dna_last3"] = (
+        length_compare["dna_seq"].fillna("").str.upper().str[-3:]
+    )
+    length_compare["dna_ends_with_stop"] = (
+        length_compare["dna_seq"]
+        .fillna("")
+        .str.upper()
+        .str.endswith(("TAA", "TAG", "TGA"))
+    )
+    metric_left, metric_right = st.columns(2)
+    comparable = length_compare[
+        length_compare["genomic_length"].notnull()
+        & (length_compare["genomic_length"] > 0)
+        & (length_compare["dna_length"] > 0)
+    ]
+    length_compare = comparable[comparable["genomic_length"] != comparable["dna_length"]]
+    table_data = comparable.assign(
+        genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
+    )
+    metric_left.metric("Number of TALEs", len(comparable))
+    metric_right.metric("TALEs with length discrepancy", len(length_compare))
+    if length_compare.empty:
+        st.info("No TALEs found with differing lengths under the current filters.")
+    else:
+        st.caption("Genomic minus DNA length")
+        stats = (
+            comparable[["genomic_length", "dna_length"]]
+            .assign(
+                genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
+            )
+            .groupby("genomic_minus_dna")
+            .size()
+            .reset_index(name="count")
         )
-        .groupby("genomic_minus_dna")
-        .size()
-        .reset_index(name="count")
-    )
-    stats = stats[stats["genomic_minus_dna"].isin(DISCREPANCY_LABELS.keys())]
-    stats["label"] = stats["genomic_minus_dna"].map(DISCREPANCY_LABELS)
-    stats = (
-        stats.set_index("label")
-        .reindex(DISCREPANCY_ORDER, fill_value=0)
-        .reset_index()
-    )
-    bar_chart = (
-        alt.Chart(stats)
-        .mark_bar()
-        .encode(
-            x=alt.X(
-                "label:N",
-                title="Genomic − DNA length",
-                sort=DISCREPANCY_ORDER,
-            ),
-            y=alt.Y("count:Q", title="TALE count"),
-            tooltip=["label:N", "count:Q"],
+        stats = stats[stats["genomic_minus_dna"].isin(DISCREPANCY_LABELS.keys())]
+        stats["label"] = stats["genomic_minus_dna"].map(DISCREPANCY_LABELS)
+        stats = (
+            stats.set_index("label")
+            .reindex(DISCREPANCY_ORDER, fill_value=0)
+            .reset_index()
         )
-    )
-    label_chart = (
-        alt.Chart(stats)
-        .mark_text(dy=-6)
-        .encode(
-            x=alt.X("label:N", sort=DISCREPANCY_ORDER),
-            y=alt.Y("count:Q"),
-            text=alt.Text("count:Q"),
+        bar_chart = (
+            alt.Chart(stats)
+            .mark_bar()
+            .encode(
+                x=alt.X(
+                    "label:N",
+                    title="Genomic − DNA length",
+                    sort=DISCREPANCY_ORDER,
+                ),
+                y=alt.Y("count:Q", title="TALE count"),
+                tooltip=["label:N", "count:Q"],
+            )
         )
-    )
-    st.altair_chart(
-        (bar_chart + label_chart).properties(height=220), use_container_width=True
-    )
-    st.dataframe(
-        table_data[
-            [
-                "id",
-                "name",
-                "strain_id",
-                "start_pos",
-                "end_pos",
-                "strand",
-                "genomic_length",
-                "dna_length",
-                "genomic_minus_dna",
-                "dna_last3",
-                "dna_ends_with_stop",
-            ]
-        ],
-        use_container_width=True,
-        height=260,
-    )
+        label_chart = (
+            alt.Chart(stats)
+            .mark_text(dy=-6)
+            .encode(
+                x=alt.X("label:N", sort=DISCREPANCY_ORDER),
+                y=alt.Y("count:Q"),
+                text=alt.Text("count:Q"),
+            )
+        )
+        st.altair_chart(
+            (bar_chart + label_chart).properties(height=220), use_container_width=True
+        )
+        st.dataframe(
+            table_data[
+                [
+                    "id",
+                    "name",
+                    "strain_id",
+                    "start_pos",
+                    "end_pos",
+                    "strand",
+                    "genomic_length",
+                    "dna_length",
+                    "genomic_minus_dna",
+                    "dna_last3",
+                    "dna_ends_with_stop",
+                ]
+            ],
+            use_container_width=True,
+            height=260,
+        )
 
 st.subheader("TALEs by Strain / Species + Pathovar")
 if strains.empty:
@@ -372,87 +375,87 @@ else:
         st.altair_chart(pos_chart.properties(height=400), use_container_width=True)
 
 st.markdown("---")
-st.subheader("Taxonomy Comparison (Legacy vs NCBI)")
-st.caption(
-    "Legacy taxonomy is inferred from the first token of `samples.legacy_strain_name` "
-    "and mapped to long-form taxa."
-)
-
-tax_raw = load_taxonomy_comparison_source()
-
-if tax_raw.empty:
-    st.info("No sample/taxonomy data available.")
-else:
-    def format_ncbi_taxon(row: pd.Series) -> str:
-        species = row.get("species")
-        pathovar = row.get("pathovar")
-        if pd.notna(species) and str(species).strip():
-            if pd.notna(pathovar) and str(pathovar).strip():
-                return f"{species} pv. {pathovar}"
-            return str(species)
-        taxon_name = row.get("taxon_name")
-        if pd.notna(taxon_name) and str(taxon_name).strip():
-            return str(taxon_name)
-        return "Unknown"
-
-    tax_raw["ncbi_taxon"] = tax_raw.apply(format_ncbi_taxon, axis=1)
-    seed = (
-        tax_raw.groupby(["legacy_code", "ncbi_taxon"])
-        .size()
-        .reset_index(name="count")
-        .sort_values(["legacy_code", "count"], ascending=[True, False])
-        .groupby("legacy_code")
-        .head(1)
+with st.expander("Taxonomy Comparison (Legacy vs NCBI)", expanded=False):
+    st.caption(
+        "Legacy taxonomy is inferred from the first token of `samples.legacy_strain_name` "
+        "and mapped to long-form taxa."
     )
-    legacy_map = dict(seed.set_index("legacy_code")["ncbi_taxon"].to_dict())
-    tax_raw["legacy_taxon"] = tax_raw["legacy_code"].map(legacy_map)
-    tax_raw["legacy_taxon"] = tax_raw["legacy_taxon"].fillna("Unknown legacy taxonomy")
-    tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].where(
-        tax_raw["ncbi_taxon"] != "Unknown", tax_raw["legacy_taxon"]
-    )
-    tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].replace(
-        "Unknown legacy taxonomy", "Unknown"
-    )
-    tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].fillna("Unknown")
 
-    mismatches = tax_raw[
-        (tax_raw["legacy_taxon"] != "Unknown legacy taxonomy")
-        & (tax_raw["ncbi_taxon"] != "Unknown")
-        & (tax_raw["legacy_taxon"] != tax_raw["ncbi_taxon"])
-    ].copy()
+    tax_raw = load_taxonomy_comparison_source()
 
-    if mismatches.empty:
-        st.info("No mismatches found between legacy and NCBI taxonomy.")
+    if tax_raw.empty:
+        st.info("No sample/taxonomy data available.")
     else:
-        st.caption("Taxonomy mismatch overview")
-        mismatch_counts = (
-            mismatches.groupby(["legacy_taxon", "ncbi_taxon"])
-            .size()
-            .reset_index(name="count")
-            .sort_values("count", ascending=False)
-        )
-        mismatch_chart = (
-            alt.Chart(mismatch_counts)
-            .mark_bar()
-            .encode(
-                y=alt.Y(
-                    "legacy_taxon:N",
-                    sort="-x",
-                    title="Legacy taxonomy",
-                    axis=alt.Axis(labelLimit=300),
-                ),
-                x=alt.X("count:Q", title="Mismatch count"),
-                color=alt.Color("ncbi_taxon:N", title="NCBI taxonomy"),
-                tooltip=["legacy_taxon:N", "ncbi_taxon:N", "count:Q"],
-            )
-        )
-        st.altair_chart(mismatch_chart.properties(height=320), use_container_width=True)
+        def format_ncbi_taxon(row: pd.Series) -> str:
+            species = row.get("species")
+            pathovar = row.get("pathovar")
+            if pd.notna(species) and str(species).strip():
+                if pd.notna(pathovar) and str(pathovar).strip():
+                    return f"{species} pv. {pathovar}"
+                return str(species)
+            taxon_name = row.get("taxon_name")
+            if pd.notna(taxon_name) and str(taxon_name).strip():
+                return str(taxon_name)
+            return "Unknown"
 
-        st.caption("Samples with differing taxonomy")
-        mismatch_rows = (
-            mismatches.groupby(["legacy_taxon", "ncbi_taxon", "ncbi_tax_id"])
+        tax_raw["ncbi_taxon"] = tax_raw.apply(format_ncbi_taxon, axis=1)
+        seed = (
+            tax_raw.groupby(["legacy_code", "ncbi_taxon"])
             .size()
             .reset_index(name="count")
-            .sort_values("count", ascending=False)
+            .sort_values(["legacy_code", "count"], ascending=[True, False])
+            .groupby("legacy_code")
+            .head(1)
         )
-        st.dataframe(mismatch_rows, use_container_width=True, height=320)
+        legacy_map = dict(seed.set_index("legacy_code")["ncbi_taxon"].to_dict())
+        tax_raw["legacy_taxon"] = tax_raw["legacy_code"].map(legacy_map)
+        tax_raw["legacy_taxon"] = tax_raw["legacy_taxon"].fillna("Unknown legacy taxonomy")
+        tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].where(
+            tax_raw["ncbi_taxon"] != "Unknown", tax_raw["legacy_taxon"]
+        )
+        tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].replace(
+            "Unknown legacy taxonomy", "Unknown"
+        )
+        tax_raw["ncbi_taxon"] = tax_raw["ncbi_taxon"].fillna("Unknown")
+
+        mismatches = tax_raw[
+            (tax_raw["legacy_taxon"] != "Unknown legacy taxonomy")
+            & (tax_raw["ncbi_taxon"] != "Unknown")
+            & (tax_raw["legacy_taxon"] != tax_raw["ncbi_taxon"])
+        ].copy()
+
+        if mismatches.empty:
+            st.info("No mismatches found between legacy and NCBI taxonomy.")
+        else:
+            st.caption("Taxonomy mismatch overview")
+            mismatch_counts = (
+                mismatches.groupby(["legacy_taxon", "ncbi_taxon"])
+                .size()
+                .reset_index(name="count")
+                .sort_values("count", ascending=False)
+            )
+            mismatch_chart = (
+                alt.Chart(mismatch_counts)
+                .mark_bar()
+                .encode(
+                    y=alt.Y(
+                        "legacy_taxon:N",
+                        sort="-x",
+                        title="Legacy taxonomy",
+                        axis=alt.Axis(labelLimit=300),
+                    ),
+                    x=alt.X("count:Q", title="Mismatch count"),
+                    color=alt.Color("ncbi_taxon:N", title="NCBI taxonomy"),
+                    tooltip=["legacy_taxon:N", "ncbi_taxon:N", "count:Q"],
+                )
+            )
+            st.altair_chart(mismatch_chart.properties(height=320), use_container_width=True)
+
+            st.caption("Samples with differing taxonomy")
+            mismatch_rows = (
+                mismatches.groupby(["legacy_taxon", "ncbi_taxon", "ncbi_tax_id"])
+                .size()
+                .reset_index(name="count")
+                .sort_values("count", ascending=False)
+            )
+            st.dataframe(mismatch_rows, use_container_width=True, height=320)
