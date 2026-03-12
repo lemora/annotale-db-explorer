@@ -86,6 +86,7 @@ def load_tales() -> pd.DataFrame:
 def load_strains() -> pd.DataFrame:
     df = query_df(
         "SELECT s.id AS id, "
+        "s.biosample_id AS biosample_id, "
         "s.strain_name AS strain_name, "
         "s.legacy_strain_name AS legacy_strain_name, "
         "tx.species AS species, "
@@ -108,6 +109,7 @@ def load_strains() -> pd.DataFrame:
     return df[
         [
             "id",
+            "biosample_id",
             "name",
             "species",
             "pathovar",
@@ -279,4 +281,36 @@ def load_tale_rvds(tale_id: int) -> pd.DataFrame:
         ORDER BY r.repeat_ordinal
         """,
         params=[int(tale_id)],
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_strain_tales(strain_id: int) -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT t.id AS tale_id,
+               t.legacy_name AS tale_name,
+               t.is_pseudo,
+               t.is_new,
+               t.start_pos,
+               t.end_pos,
+               t.strand,
+               t.protein_seq,
+               fm.family_id AS family,
+               a.id AS assembly_id,
+               a.accession,
+               a.version,
+               a.accession_type,
+               a.replicon_type
+        FROM tale t
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        LEFT JOIN tale_family_member fm ON fm.tale_id = t.id
+        WHERE a.sample_id = ?
+        ORDER BY
+            CASE WHEN t.start_pos IS NULL THEN 1 ELSE 0 END,
+            a.accession,
+            t.start_pos,
+            t.id
+        """,
+        params=[int(strain_id)],
     )

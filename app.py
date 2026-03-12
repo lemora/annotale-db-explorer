@@ -7,6 +7,7 @@ pages = [
     st.Page("pages/03_TALE_Families.py", title="TALE Families"),
     st.Page("pages/04_Crosstab.py", title="Crosstab"),
     st.Page("pages/05_Sample_Map.py", title="Sample Map"),
+    st.Page("pages/06_Genome_Organization.py", title="Genome Organization"),
 ]
 
 navigation = st.navigation(pages)
