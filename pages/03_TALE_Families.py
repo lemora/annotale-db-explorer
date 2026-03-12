@@ -62,52 +62,116 @@ def build_edge_points(nodes_df, edges_df, selected_id: int | None) -> list[dict]
     edges_df = edges_df.reset_index().rename(columns={"index": "edge_id"})
     allowed_node_ids = set(nodes_df["node_id"].tolist())
     points: list[dict] = []
+    internal_nodes = nodes_df[~nodes_df["is_leaf"]]
+    deepest_internal_depth = int(internal_nodes["y"].max()) if not internal_nodes.empty else None
+    child_map: dict[int, list[int]] = {}
+    node_lookup = nodes_df.set_index("node_id")
+
+    for _, edge in edges_df.iterrows():
+        parent_id = int(edge["parent_id"])
+        child_id = int(edge["child_id"])
+        child_map.setdefault(parent_id, []).append(child_id)
+
+    leaf_depth_cache: dict[int, set[int]] = {}
+
+    def descendant_leaf_depths(node_id: int) -> set[int]:
+        if node_id in leaf_depth_cache:
+            return leaf_depth_cache[node_id]
+        node = node_lookup.loc[node_id]
+        if bool(node["is_leaf"]):
+            depths = {int(node["y"])}
+        else:
+            depths = set()
+            for child_id in child_map.get(node_id, []):
+                depths.update(descendant_leaf_depths(child_id))
+        leaf_depth_cache[node_id] = depths
+        return depths
 
     for _, edge in edges_df.iterrows():
         if edge["parent_id"] not in allowed_node_ids or edge["child_id"] not in allowed_node_ids:
             continue
         parent = nodes_df.loc[nodes_df["node_id"] == edge["parent_id"]].iloc[0]
         child = nodes_df.loc[nodes_df["node_id"] == edge["child_id"]].iloc[0]
-        points.extend(
-            (
-                {
-                    "edge_id": int(edge["edge_id"]),
-                    "order": 0,
-                    "x": float(parent["x_plot"]),
-                    "y": float(parent["y_plot"]),
-                    "is_leaf": bool(parent["is_leaf"]),
-                    "tale_id": parent["tale_id"],
-                    "tale_name": parent["tale_name"] or "",
-                    "tooltip_text": (
-                        f"{int(parent['tale_id'])}: {parent['tale_name'] or ''}"
-                        if parent["is_leaf"] and parent["tale_id"] is not None
-                        else None
-                    ),
-                    "is_selected": bool(parent["tale_id"] == selected_id),
-                    "is_pseudo": int(parent["is_pseudo"])
-                    if str(parent["is_pseudo"]) not in ("None", "nan")
-                    else 0,
-                },
-                {
-                    "edge_id": int(edge["edge_id"]),
-                    "order": 1,
-                    "x": float(child["x_plot"]),
-                    "y": float(child["y_plot"]),
-                    "is_leaf": bool(child["is_leaf"]),
-                    "tale_id": child["tale_id"],
-                    "tale_name": child["tale_name"] or "",
-                    "tooltip_text": (
-                        f"{int(child['tale_id'])}: {child['tale_name'] or ''}"
-                        if child["is_leaf"] and child["tale_id"] is not None
-                        else None
-                    ),
-                    "is_selected": bool(child["tale_id"] == selected_id),
-                    "is_pseudo": int(child["is_pseudo"])
-                    if str(child["is_pseudo"]) not in ("None", "nan")
-                    else 0,
-                },
-            )
+        parent_leaf_depths = descendant_leaf_depths(int(parent["node_id"]))
+        sibling_ids = [
+            node_id
+            for node_id in child_map.get(int(parent["node_id"]), [])
+            if node_id != int(child["node_id"])
+        ]
+        sibling_anchor_x = (
+            max(float(node_lookup.loc[node_id]["x_plot"]) for node_id in sibling_ids)
+            if sibling_ids
+            else float(parent["x_plot"])
         )
+        parent_point = {
+            "edge_id": int(edge["edge_id"]),
+            "order": 0,
+            "x": float(parent["x_plot"]),
+            "y": float(parent["y_plot"]),
+            "show_point": True,
+            "is_leaf": bool(parent["is_leaf"]),
+            "tale_id": parent["tale_id"],
+            "tale_name": parent["tale_name"] or "",
+            "tooltip_text": (
+                f"{int(parent['tale_id'])}: {parent['tale_name'] or ''}"
+                if parent["is_leaf"] and parent["tale_id"] is not None
+                else None
+            ),
+            "is_selected": bool(parent["tale_id"] == selected_id),
+            "is_pseudo": int(parent["is_pseudo"])
+            if str(parent["is_pseudo"]) not in ("None", "nan")
+            else 0,
+        }
+        child_point = {
+            "edge_id": int(edge["edge_id"]),
+            "order": 1,
+            "x": float(child["x_plot"]),
+            "y": float(child["y_plot"]),
+            "show_point": True,
+            "is_leaf": bool(child["is_leaf"]),
+            "tale_id": child["tale_id"],
+            "tale_name": child["tale_name"] or "",
+            "tooltip_text": (
+                f"{int(child['tale_id'])}: {child['tale_name'] or ''}"
+                if child["is_leaf"] and child["tale_id"] is not None
+                else None
+            ),
+            "is_selected": bool(child["tale_id"] == selected_id),
+            "is_pseudo": int(child["is_pseudo"])
+            if str(child["is_pseudo"]) not in ("None", "nan")
+            else 0,
+        }
+
+        if (
+            child["is_leaf"]
+            and deepest_internal_depth is not None
+            and int(parent["y"]) < deepest_internal_depth
+            and len(parent_leaf_depths) > 1
+        ):
+            points.extend(
+                (
+                    parent_point,
+                    {
+                        "edge_id": int(edge["edge_id"]),
+                        "order": 1,
+                        "x": sibling_anchor_x,
+                        "y": float(child["y_plot"]),
+                        "show_point": False,
+                        "is_leaf": False,
+                        "tale_id": None,
+                        "tale_name": "",
+                        "tooltip_text": None,
+                        "is_selected": False,
+                        "is_pseudo": 0,
+                    },
+                    {
+                        **child_point,
+                        "order": 2,
+                    },
+                )
+            )
+        else:
+            points.extend((parent_point, child_point))
 
     if not points:
         lone = nodes_df.iloc[0]
@@ -117,6 +181,7 @@ def build_edge_points(nodes_df, edges_df, selected_id: int | None) -> list[dict]
                 "order": 0,
                 "x": float(lone["x_plot"]),
                 "y": float(lone["y_plot"]),
+                "show_point": True,
                 "is_leaf": bool(lone["is_leaf"]),
                 "tale_id": lone["tale_id"],
                 "tale_name": lone["tale_name"] or "",
@@ -426,7 +491,14 @@ spec = {
     "mark": (
         {"type": "point", "filled": True, "size": 90}
         if single_node
-        else {"type": "line", "point": {"filled": True, "size": 70}}
+        else {
+            "type": "line",
+            "point": {
+                "filled": True,
+                "size": 70,
+                "opacity": {"expr": "datum.show_point ? 1 : 0"},
+            },
+        }
     ),
     "encoding": {
         "x": {"field": "x", "type": "quantitative", "axis": None},
