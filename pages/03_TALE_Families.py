@@ -527,6 +527,12 @@ spec = {
 }
 
 with right:
+    st.markdown(
+        "<div style='text-align: center; font-size: 0.875rem; opacity: 0.75;'>"
+        "Click a node in the tree to select a TALE."
+        "</div>",
+        unsafe_allow_html=True,
+    )
     try:
         event = st.vega_lite_chart(
             spec, use_container_width=True, theme="streamlit", on_select="rerun"
