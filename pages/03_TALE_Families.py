@@ -176,12 +176,56 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
       }}
     </script>
     <style>
-      #tale-table-wrapper {{ max-height: 300px; overflow: auto; border: 1px solid #eee; }}
-      #tale-table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
-      #tale-table th, #tale-table td {{ padding: 6px 8px; border-bottom: 1px solid #f0f0f0; }}
-      #tale-table tr.row.selected {{ background: #ff7f0e; color: #fff; }}
-      #tale-table tr.row:hover {{ background: #fff0e6; cursor: pointer; }}
-      #tale-table thead th {{ position: sticky; top: 0; background: #fafafa; z-index: 1; }}
+      :root {{
+        color-scheme: light dark;
+        --tale-table-bg: #ffffff;
+        --tale-table-text: #1f2937;
+        --tale-table-border: #e5e7eb;
+        --tale-table-header-bg: #f9fafb;
+        --tale-table-hover-bg: #fff0e6;
+        --tale-table-selected-bg: #ff7f0e;
+        --tale-table-selected-text: #ffffff;
+      }}
+
+      @media (prefers-color-scheme: dark) {{
+        :root {{
+          --tale-table-bg: #0f172a;
+          --tale-table-text: #e5e7eb;
+          --tale-table-border: #334155;
+          --tale-table-header-bg: #1e293b;
+          --tale-table-hover-bg: #2a3446;
+        }}
+      }}
+
+      body {{ margin: 0; background: transparent; }}
+      #tale-table-wrapper {{
+        max-height: 300px;
+        overflow: auto;
+        border: 1px solid var(--tale-table-border);
+        background: var(--tale-table-bg);
+      }}
+      #tale-table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        color: var(--tale-table-text);
+        background: var(--tale-table-bg);
+      }}
+      #tale-table th, #tale-table td {{
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--tale-table-border);
+      }}
+      #tale-table tr.row.selected {{
+        background: var(--tale-table-selected-bg);
+        color: var(--tale-table-selected-text);
+      }}
+      #tale-table tr.row:hover {{ background: var(--tale-table-hover-bg); cursor: pointer; }}
+      #tale-table thead th {{
+        position: sticky;
+        top: 0;
+        background: var(--tale-table-header-bg);
+        z-index: 1;
+      }}
     </style>
     """
     components.html(table_html, height=320)
