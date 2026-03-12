@@ -408,12 +408,12 @@ with left:
 
     prev_col, next_col = st.columns(2)
     current_idx = st.session_state["family_idx"]
-    if prev_col.button("<- Previous Family"):
+    if prev_col.button("← Previous Family"):
         new_idx = (current_idx - 1) % len(family_options)
         st.session_state["family_idx"] = new_idx
         select_first_tale_for_family(family_options[new_idx])
         st.rerun()
-    if next_col.button("Next Family ->"):
+    if next_col.button("Next Family →"):
         new_idx = (current_idx + 1) % len(family_options)
         st.session_state["family_idx"] = new_idx
         select_first_tale_for_family(family_options[new_idx])
