@@ -313,6 +313,17 @@ def render_assembly_chart(
     if not compress_gaps:
         domain_start = max(0.0, domain_start)
     assembly_domain = [domain_start, domain_max + domain_padding]
+    tale_tooltip = [
+        alt.Tooltip("tale_name:N", title="TALE"),
+        alt.Tooltip("family:N", title="Family"),
+        alt.Tooltip("strand_label:N", title="Strand"),
+        alt.Tooltip("start_pos:Q", title="Start", format=",.0f"),
+        alt.Tooltip("end_pos:Q", title="End", format=",.0f"),
+        alt.Tooltip("feature_len:Q", title="Length (e-s)", format=",.0f"),
+        alt.Tooltip("protein_len:Q", title="Protein aa", format=",.0f"),
+        alt.Tooltip("pseudo_label:N", title="Pseudo"),
+        alt.Tooltip("assembly_label:N", title="Assembly"),
+    ]
 
     st.subheader(assembly_label)
 
@@ -344,17 +355,7 @@ def render_assembly_chart(
                 alt.value(0.55),
                 alt.value(0.95),
             ),
-            tooltip=[
-                alt.Tooltip("tale_name:N", title="TALE"),
-                alt.Tooltip("family:N", title="Family"),
-                alt.Tooltip("strand_label:N", title="Strand"),
-                alt.Tooltip("start_pos:Q", title="Start", format=",.0f"),
-                alt.Tooltip("end_pos:Q", title="End", format=",.0f"),
-                alt.Tooltip("feature_len:Q", title="Length (e-s)", format=",.0f"),
-                alt.Tooltip("protein_len:Q", title="Protein aa", format=",.0f"),
-                alt.Tooltip("pseudo_label:N", title="Pseudo"),
-                alt.Tooltip("assembly_label:N", title="Assembly"),
-            ],
+            tooltip=tale_tooltip,
         )
     )
 
@@ -365,6 +366,7 @@ def render_assembly_chart(
             x=alt.X("label_pos:Q"),
             y=alt.Y("lane:N", sort=lane_order),
             text="plot_number_label:N",
+            tooltip=tale_tooltip,
         )
         .transform_calculate(label_pos="(datum.start_plot + datum.end_plot) / 2")
         .transform_filter("datum.plot_len >= datum.number_min_width")
