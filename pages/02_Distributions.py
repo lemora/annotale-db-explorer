@@ -3,7 +3,6 @@ import pandas as pd
 import streamlit as st
 
 from utils.db import (
-    load_repeat_positions,
     load_strains,
     load_tales,
     load_taxonomy_comparison_source,
@@ -263,120 +262,6 @@ else:
         )
     )
     st.altair_chart(strain_chart.properties(height=chart_height), use_container_width=True)
-
-st.subheader("RVD Counts by Repeat Position")
-pos_raw = load_repeat_positions()
-
-if pos_raw.empty:
-    st.warning("No repeat data available for position plot.")
-else:
-    tax_filter = st.radio(
-        "Filter by taxonomy",
-        ["All", "Species", "Species + Pathovar"],
-        horizontal=True,
-        key="rvd_pos_tax_filter",
-    )
-
-    plot_source = pos_raw.merge(
-        tales[["id", "strain_id"]],
-        left_on="tale_id",
-        right_on="id",
-        how="left",
-        suffixes=("", "_tale"),
-    )
-    plot_source["position"] = plot_source["position"] + 1
-    plot_source = plot_source.merge(
-        strains[["id", "species", "pathovar", "taxon_name", "legacy_strain_name"]],
-        left_on="strain_id",
-        right_on="id",
-        how="left",
-        suffixes=("", "_strain"),
-    )
-
-    if tax_filter != "All":
-        if strains.empty:
-            st.info("No strain metadata available; showing all repeats.")
-        else:
-            include_pathovar = tax_filter == "Species + Pathovar"
-            legacy_map = build_legacy_taxon_map(
-                strains,
-                include_pathovar=include_pathovar,
-                legacy_col="legacy_strain_name",
-                sample_id_col="id",
-            )
-            plot_source["species_pathovar"] = apply_taxon_fallback(
-                plot_source,
-                include_pathovar=include_pathovar,
-                legacy_map=legacy_map,
-                id_col="strain_id",
-                legacy_col="legacy_strain_name",
-            )
-            plot_source["species_pathovar"] = abbreviate_taxon_labels(
-                plot_source["species_pathovar"]
-            )
-            taxon_options = ["All"] + sorted(
-                plot_source["species_pathovar"].dropna().unique().tolist()
-            )
-            selected_taxon = st.selectbox(
-                tax_filter, taxon_options, key="rvd_pos_taxon"
-            )
-            if selected_taxon != "All":
-                plot_source = plot_source[
-                    plot_source["species_pathovar"] == selected_taxon
-                ]
-
-    if plot_source.empty:
-        st.warning("No repeats match the current taxonomy filter.")
-        plot_counts = pd.DataFrame(columns=["position", "rvd", "count"])
-    else:
-        plot_counts = (
-            plot_source.groupby(["position", "rvd"]).size().reset_index(name="count")
-        )
-
-    limit_topk = st.checkbox("Limit to top‑K RVDs per position", value=False)
-    default_k = 7
-    top_k = st.slider("K", 3, 15, default_k, 1, disabled=not limit_topk)
-
-    if limit_topk:
-        plot_counts = (
-            plot_counts.sort_values(["position", "count"], ascending=[True, False])
-            .groupby("position")
-            .head(top_k)
-        )
-
-    if plot_counts.empty:
-        st.info("No repeat data to plot for the current filters.")
-    else:
-        legend_selection = alt.selection_point(fields=["rvd"], bind="legend")
-        pos_chart = (
-            alt.Chart(plot_counts)
-            .mark_bar()
-            .encode(
-                x=alt.X(
-                    "position:O",
-                    title="Repeat position within TALE",
-                    sort="ascending",
-                ),
-                y=alt.Y(
-                    "count:Q",
-                    title="RVD percent",
-                    stack="normalize",
-                    axis=alt.Axis(format=".0%"),
-                ),
-                color=alt.Color("rvd:N", title="RVD"),
-                tooltip=[
-                    "position:Q",
-                    "rvd:N",
-                    "count:Q",
-                    alt.Tooltip("percent:Q", title="Percent", format=".1%"),
-                ],
-            )
-            .add_params(legend_selection)
-            .transform_filter(legend_selection)
-            .transform_joinaggregate(total="sum(count)", groupby=["position"])
-            .transform_calculate(percent="datum.count / datum.total")
-        )
-        st.altair_chart(pos_chart.properties(height=400), use_container_width=True)
 
 st.markdown("---")
 with st.expander("Taxonomy Comparison (Legacy vs NCBI)", expanded=False):
