@@ -213,7 +213,10 @@ def compress_empty_regions(
                 continue
 
             removed_from_axis = gap_size - retained_gap_size
-            gap_mid = gap_start + (gap_size / 2.0)
+            offset_before = offset
+            offset += removed_from_axis
+            gap_start_plot = gap_start - offset_before
+            gap_end_plot = gap_end - offset
             collapsed_rows.append(
                 {
                     "assembly_label": assembly_label,
@@ -221,10 +224,13 @@ def compress_empty_regions(
                     "gap_end": int(gap_end),
                     "gap_size": int(gap_size),
                     "removed_from_axis": int(removed_from_axis),
-                    "gap_mid_plot": gap_mid - offset - (removed_from_axis / 2.0),
+                    "offset_before": int(offset_before),
+                    "offset_after": int(offset),
+                    "gap_start_plot": gap_start_plot,
+                    "gap_end_plot": gap_end_plot,
+                    "gap_mid_plot": (gap_start_plot + gap_end_plot) / 2.0,
                 }
             )
-            offset += removed_from_axis
 
             mask = (
                 (plot_df["assembly_label"] == assembly_label)
@@ -234,6 +240,31 @@ def compress_empty_regions(
             plot_df.loc[mask, "end_plot"] = plot_df.loc[mask, "end_pos"] - offset
 
     return plot_df, pd.DataFrame(collapsed_rows)
+
+
+def compressed_axis_label_expr(assembly_gaps: pd.DataFrame) -> str:
+    if assembly_gaps.empty:
+        return "format(datum.value, ',.0f')"
+
+    sorted_gaps = assembly_gaps.sort_values(["gap_start_plot", "gap_end_plot"])
+    expr = "datum.value"
+    for gap in sorted_gaps.itertuples(index=False):
+        gap_start_plot = float(gap.gap_start_plot)
+        gap_end_plot = float(gap.gap_end_plot)
+        gap_start = float(gap.gap_start)
+        gap_size = float(gap.gap_size)
+        offset_after = float(gap.offset_after)
+        inside_gap_expr = (
+            f"({gap_start} + ((datum.value - {gap_start_plot}) * {gap_size} / "
+            f"{RETAINED_GAP_SIZE}))"
+        )
+        expr = (
+            f"(datum.value < {gap_start_plot} ? {expr} : "
+            f"datum.value <= {gap_end_plot} ? {inside_gap_expr} : "
+            f"(datum.value + {offset_after}))"
+        )
+
+    return f"format({expr}, ',.0f')"
 
 
 def prepare_tales(sample_id: int) -> pd.DataFrame:
@@ -298,6 +329,11 @@ def render_assembly_chart(
     collapsed_intervals: pd.DataFrame,
 ) -> None:
     assembly_label = assembly_tales["assembly_label"].iloc[0]
+    assembly_gaps = pd.DataFrame()
+    if compress_gaps and not collapsed_intervals.empty:
+        assembly_gaps = collapsed_intervals[
+            collapsed_intervals["assembly_label"] == assembly_label
+        ].copy()
     lane_order = []
     strand_labels = assembly_tales["strand_label"].drop_duplicates().tolist()
     for strand_label in ["+", "-", "?"]:
@@ -326,6 +362,9 @@ def render_assembly_chart(
     ]
 
     st.subheader(assembly_label)
+    x_axis = alt.Axis()
+    if compress_gaps:
+        x_axis = alt.Axis(labelExpr=compressed_axis_label_expr(assembly_gaps))
 
     chart = (
         alt.Chart(assembly_tales)
@@ -339,6 +378,7 @@ def render_assembly_chart(
                     else "Genomic position (compressed)"
                 ),
                 scale=alt.Scale(domain=assembly_domain),
+                axis=x_axis,
             ),
             x2="end_plot:Q",
             y=alt.Y("lane:N", title=None, sort=lane_order, axis=alt.Axis(labelLimit=500)),
@@ -374,9 +414,6 @@ def render_assembly_chart(
 
     layers = [chart]
     if compress_gaps and not collapsed_intervals.empty:
-        assembly_gaps = collapsed_intervals[
-            collapsed_intervals["assembly_label"] == assembly_label
-        ].copy()
         if not assembly_gaps.empty:
             layers.append(
                 alt.Chart(assembly_gaps)
