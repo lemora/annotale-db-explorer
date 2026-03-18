@@ -10,8 +10,9 @@ st.caption("Interactive explorer for the AnnoTALE SQLite database.")
 st.image("img/AnnoTALE_transp.png", width=220)
 st.markdown(
     """
-    Use the sidebar to move between pages for schema inspection, TALE distributions,
-    family trees, crosstabs, and sample geography.
+    Use the sidebar to move through database overview, TALE distributions,
+    crosstabs, sample geography, family trees, genome organization,
+    and individual TALE detail.
     """
 )
 
@@ -44,20 +45,23 @@ with p1:
         **Distributions**  
         Explore TALE lengths, family sizes, RVD composition, and taxonomy comparison.
 
-        **TALE Families**  
-        Navigate family trees and inspect selected TALE details.
-        """
-    )
-with p2:
-    st.markdown(
-        """
         **Crosstab**  
         Compare TALE family counts across species/pathovars/strains.
 
         **Sample Map**  
         View country-level sample distribution and metadata.
+        """
+    )
+with p2:
+    st.markdown(
+        """
+        **TALE Families**  
+        Navigate family trees and inspect selected TALE details.
 
         **Genome Organization**  
         View TALE positions across assemblies and strands for a selected strain.
+
+        **TALE Detail**  
+        Inspect one TALE, download sequences, and follow record-level links.
         """
     )

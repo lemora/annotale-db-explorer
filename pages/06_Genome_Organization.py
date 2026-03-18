@@ -2,13 +2,46 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from utils.db import load_strain_tales, load_strains, query_df
+from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
 from utils.page import init_page
 from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
 
 init_page("Genome Organization", "Genome Organization")
 st.title("TALE Genomic Organization")
 st.caption("TALE positions by replicon and strand, colored by family.")
+st.markdown(
+    """
+    <style>
+    .selected-tale-card {
+        padding: 1rem 1.1rem;
+        border: 1px solid #dfe6d8;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #fbfbf7 0%, #f3f7ef 100%);
+        min-height: 180px;
+    }
+    .selected-tale-name {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1d2618;
+        margin-bottom: 0.3rem;
+    }
+    .selected-tale-sub {
+        color: #5c6658;
+        font-size: 0.9rem;
+        margin-bottom: 0.8rem;
+    }
+    .selected-tale-label {
+        font-weight: 700;
+        color: #283222;
+    }
+    .selected-tale-line {
+        color: #374235;
+        margin: 0.28rem 0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 DEFAULT_SAMPLE_ID = 4
 DEFAULT_GAP_THRESHOLD = 100_000
@@ -57,6 +90,49 @@ LABEL_TABLE_COLUMNS = [
     "protein_len",
     "pseudo_label",
 ]
+
+
+def to_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return int(cleaned) if cleaned.isdigit() else None
+
+
+def extract_selected_id(event_payload: dict | None) -> int | None:
+    if not isinstance(event_payload, dict):
+        return None
+
+    def find_tale_id(data):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if key == "tale_id" and value is not None:
+                    return value
+                found = find_tale_id(value)
+                if found is not None:
+                    return found
+        elif isinstance(data, list):
+            for item in data:
+                found = find_tale_id(item)
+                if found is not None:
+                    return found
+        return None
+
+    selected = find_tale_id(event_payload)
+    return int(selected) if selected is not None else None
+
+
+def assembly_label_from_parts(assembly_id, accession, replicon_type) -> str:
+    accession_text = str(accession or "").strip()
+    replicon_text = str(replicon_type or "").strip()
+    suffix = (
+        f" ({replicon_text})"
+        if replicon_text and replicon_text.lower() != "unknown"
+        else ""
+    )
+    if accession_text and accession_text.lower() != "unknown":
+        return f"{accession_text}{suffix}"
+    return f"assembly {int(assembly_id)}{suffix}"
 
 
 def sample_option_label(row: pd.Series) -> str:
@@ -139,6 +215,69 @@ def default_scope(scoped_samples: pd.DataFrame) -> tuple[str, str]:
 def initialize_widget_state(key: str, options: list[str] | list[int], fallback):
     if st.session_state.get(key) not in options:
         st.session_state[key] = fallback
+
+
+def rerun_page() -> None:
+    try:
+        st.rerun()
+    except AttributeError:
+        st.experimental_rerun()
+
+
+def apply_query_tale_selection(
+    scope_samples: pd.DataFrame, selected_tale_id: int | None
+) -> None:
+    if selected_tale_id is None:
+        return
+    if st.session_state.get("genome_org_last_query_tale_id") == int(selected_tale_id):
+        return
+
+    query_tale_detail = load_tale_detail(int(selected_tale_id))
+    if query_tale_detail.empty:
+        return
+
+    query_row = query_tale_detail.iloc[0]
+    query_sample_id = query_row.get("sample_id")
+    if pd.isna(query_sample_id):
+        return
+
+    sample_match = scope_samples[scope_samples["id"] == int(query_sample_id)]
+    if sample_match.empty:
+        return
+
+    sample_row = sample_match.iloc[0]
+    st.session_state["genome_org_species"] = sample_row["species_display"]
+    st.session_state["genome_org_pathovar"] = sample_row["pathovar_display"]
+    st.session_state["genome_org_sample_id"] = int(query_sample_id)
+    st.session_state["genome_org_selected_tale_id"] = int(selected_tale_id)
+    st.session_state["genome_org_target_assembly"] = assembly_label_from_parts(
+        query_row.get("assembly_id"),
+        query_row.get("accession"),
+        query_row.get("replicon_type"),
+    )
+    st.session_state["genome_org_last_query_tale_id"] = int(selected_tale_id)
+
+
+def apply_pending_navigation_selection(scope_samples: pd.DataFrame) -> None:
+    pending_sample_id = st.session_state.pop("genome_org_pending_sample_id", None)
+    pending_tale_id = st.session_state.pop("genome_org_pending_tale_id", None)
+    pending_assembly = st.session_state.pop("genome_org_pending_assembly", None)
+    if pending_sample_id is None:
+        return
+
+    sample_match = scope_samples[scope_samples["id"] == int(pending_sample_id)]
+    if sample_match.empty:
+        return
+
+    sample_row = sample_match.iloc[0]
+    st.session_state["genome_org_species"] = sample_row["species_display"]
+    st.session_state["genome_org_pathovar"] = sample_row["pathovar_display"]
+    st.session_state["genome_org_sample_id"] = int(pending_sample_id)
+    if pending_tale_id is not None:
+        st.session_state["genome_org_selected_tale_id"] = int(pending_tale_id)
+        st.session_state["genome_org_last_query_tale_id"] = None
+    if pending_assembly:
+        st.session_state["genome_org_target_assembly"] = pending_assembly
 
 
 def select_scope_samples(scoped_samples: pd.DataFrame) -> tuple[str, str, pd.DataFrame]:
@@ -272,14 +411,12 @@ def prepare_tales(sample_id: int) -> pd.DataFrame:
     tales["family"] = tales["family"].fillna("Unassigned")
     tales["replicon_type"] = tales["replicon_type"].fillna("unknown")
     tales["accession"] = tales["accession"].fillna("unknown")
-    def assembly_label(row: pd.Series) -> str:
-        replicon_type = str(row["replicon_type"] or "").strip()
-        suffix = f" ({replicon_type})" if replicon_type and replicon_type != "unknown" else ""
-        if row["accession"] != "unknown":
-            return f"{row['accession']}{suffix}"
-        return f"assembly {int(row['assembly_id'])}{suffix}"
-
-    tales["assembly_label"] = tales.apply(assembly_label, axis=1)
+    tales["assembly_label"] = tales.apply(
+        lambda row: assembly_label_from_parts(
+            row["assembly_id"], row["accession"], row["replicon_type"]
+        ),
+        axis=1,
+    )
     tales["strand_label"] = tales["strand"].map({1: "+", -1: "-"}).fillna("?")
     tales["lane"] = tales["assembly_label"] + "  strand " + tales["strand_label"]
     tales["feature_len"] = tales["end_pos"] - tales["start_pos"]
@@ -314,6 +451,52 @@ def prepare_plot_tales(
     return filtered, without_coords.drop_duplicates(subset=["tale_id"]).copy()
 
 
+def initialize_selected_tale_state() -> None:
+    if "genome_org_selected_tale_id" not in st.session_state:
+        st.session_state["genome_org_selected_tale_id"] = None
+
+
+def initialize_assembly_filter(available_assemblies: list[str]) -> list[str]:
+    target_assembly = st.session_state.pop("genome_org_target_assembly", None)
+    current_assemblies = st.session_state.get("genome_org_assemblies")
+    if not current_assemblies or not set(current_assemblies).issubset(
+        set(available_assemblies)
+    ):
+        st.session_state["genome_org_assemblies"] = available_assemblies
+    if target_assembly in available_assemblies:
+        st.session_state["genome_org_assemblies"] = [target_assembly]
+
+    return st.multiselect(
+        "Assemblies / replicons",
+        available_assemblies,
+        key="genome_org_assemblies",
+    )
+
+
+def build_plot_data(
+    tales: pd.DataFrame, selected_assemblies: list[str], compress_gaps: bool
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    plot_tales, unplaced_tales = prepare_plot_tales(
+        tales,
+        selected_assemblies=selected_assemblies,
+    )
+    if plot_tales.empty:
+        return pd.DataFrame(), pd.DataFrame(), unplaced_tales
+
+    if not compress_gaps:
+        plot_df = plot_tales.copy()
+        plot_df["start_plot"] = plot_df["start_pos"]
+        plot_df["end_plot"] = plot_df["end_pos"]
+        return plot_df, pd.DataFrame(), unplaced_tales
+
+    plot_df, collapsed_intervals = compress_empty_regions(
+        plot_tales,
+        min_gap_size=DEFAULT_GAP_THRESHOLD,
+        retained_gap_size=RETAINED_GAP_SIZE,
+    )
+    return plot_df, collapsed_intervals, unplaced_tales
+
+
 def family_color_map(families: list[str]) -> dict[str, str]:
     return {
         family: FAMILY_COLORS[idx % len(FAMILY_COLORS)]
@@ -327,8 +510,15 @@ def render_assembly_chart(
     colors_by_family: dict[str, str],
     compress_gaps: bool,
     collapsed_intervals: pd.DataFrame,
-) -> None:
+    selected_tale_id: int | None,
+) -> int | None:
     assembly_label = assembly_tales["assembly_label"].iloc[0]
+    selection_name = (
+        "selected_tale_" + "".join(ch if ch.isalnum() else "_" for ch in assembly_label)
+    )
+    chart_key = "genome_org_chart_" + "".join(
+        ch if ch.isalnum() else "_" for ch in assembly_label
+    )
     assembly_gaps = pd.DataFrame()
     if compress_gaps and not collapsed_intervals.empty:
         assembly_gaps = collapsed_intervals[
@@ -349,6 +539,7 @@ def render_assembly_chart(
     if not compress_gaps:
         domain_start = max(0.0, domain_start)
     assembly_domain = [domain_start, domain_max + domain_padding]
+    st.subheader(assembly_label)
     tale_tooltip = [
         alt.Tooltip("tale_name:N", title="TALE"),
         alt.Tooltip("family:N", title="Family"),
@@ -360,11 +551,16 @@ def render_assembly_chart(
         alt.Tooltip("pseudo_label:N", title="Pseudo"),
         alt.Tooltip("assembly_label:N", title="Assembly"),
     ]
-
-    st.subheader(assembly_label)
     x_axis = alt.Axis()
     if compress_gaps:
         x_axis = alt.Axis(labelExpr=compressed_axis_label_expr(assembly_gaps))
+    tale_select = alt.selection_point(
+        fields=["tale_id"],
+        on="click",
+        clear=False,
+        empty=False,
+        name=selection_name,
+    )
 
     chart = (
         alt.Chart(assembly_tales)
@@ -382,6 +578,7 @@ def render_assembly_chart(
             ),
             x2="end_plot:Q",
             y=alt.Y("lane:N", title=None, sort=lane_order, axis=alt.Axis(labelLimit=500)),
+            detail=alt.Detail("tale_id:N"),
             color=alt.Color(
                 "family:N",
                 legend=None,
@@ -391,49 +588,84 @@ def render_assembly_chart(
                 ),
             ),
             opacity=alt.condition(
-                "datum.is_pseudo == 1",
-                alt.value(0.55),
-                alt.value(0.95),
+                tale_select,
+                alt.value(1.0),
+                alt.value(0.9),
+            ),
+            stroke=alt.condition(
+                f"datum.tale_id == {selected_tale_id}" if selected_tale_id is not None else "false",
+                alt.value("#111111"),
+                alt.value("transparent"),
+            ),
+            strokeWidth=alt.condition(
+                f"datum.tale_id == {selected_tale_id}" if selected_tale_id is not None else "false",
+                alt.value(2),
+                alt.value(0),
             ),
             tooltip=tale_tooltip,
         )
+        .add_params(tale_select)
     )
-
-    labels = (
-        alt.Chart(assembly_tales)
-        .mark_text(align="center", baseline="middle", fontSize=10, color="#111111")
-        .encode(
-            x=alt.X("label_pos:Q"),
-            y=alt.Y("lane:N", sort=lane_order),
-            text="plot_number_label:N",
-            tooltip=tale_tooltip,
+    chart_spec = chart.properties(height=chart_height).to_dict()
+    try:
+        event = st.vega_lite_chart(
+            chart_spec,
+            use_container_width=True,
+            theme="streamlit",
+            on_select="rerun",
+            key=chart_key,
         )
-        .transform_calculate(label_pos="(datum.start_plot + datum.end_plot) / 2")
-        .transform_filter("datum.plot_len >= datum.number_min_width")
+    except TypeError:
+        st.altair_chart(chart.properties(height=chart_height), use_container_width=True)
+        return None
+
+    clicked_id = extract_selected_id(event)
+    if clicked_id is not None:
+        return clicked_id
+    return selected_tale_id
+
+
+def render_selected_tale(selected_row: pd.Series) -> None:
+    st.subheader("Selected TALE")
+    coordinates = "Not available"
+    if pd.notna(selected_row.get("start_pos")) and pd.notna(selected_row.get("end_pos")):
+        coordinates = (
+            f"{int(selected_row['start_pos']):,} - {int(selected_row['end_pos']):,}"
+        )
+    genomic_length = "Not available"
+    if pd.notna(selected_row.get("feature_len")):
+        genomic_length = f"{int(selected_row['feature_len']):,}"
+    protein_length = "Not available"
+    if pd.notna(selected_row.get("protein_len")):
+        protein_length = f"{int(selected_row['protein_len']):,}"
+
+    st.markdown(
+        f"""
+        <div class="selected-tale-card">
+            <div class="selected-tale-name">{selected_row['tale_name']}</div>
+            <div class="selected-tale-sub">
+                TALE ID {int(selected_row['tale_id'])} • {selected_row['family']} • {selected_row['assembly_label']}
+            </div>
+            <div class="selected-tale-line"><span class="selected-tale-label">Coordinates:</span> {coordinates}</div>
+            <div class="selected-tale-line"><span class="selected-tale-label">Strand:</span> {selected_row['strand_label']}</div>
+            <div class="selected-tale-line"><span class="selected-tale-label">Pseudo:</span> {selected_row['pseudo_label']}</div>
+            <div class="selected-tale-line"><span class="selected-tale-label">Genomic length:</span> {genomic_length}</div>
+            <div class="selected-tale-line"><span class="selected-tale-label">Protein aa:</span> {protein_length}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-
-    layers = [chart]
-    if compress_gaps and not collapsed_intervals.empty:
-        if not assembly_gaps.empty:
-            layers.append(
-                alt.Chart(assembly_gaps)
-                .mark_rule(color="#666666", strokeDash=[4, 4], strokeWidth=1)
-                .encode(
-                    x=alt.X("gap_mid_plot:Q"),
-                    tooltip=[
-                        alt.Tooltip("assembly_label:N", title="Assembly"),
-                        alt.Tooltip("gap_start:Q", title="Gap start", format=",.0f"),
-                        alt.Tooltip("gap_end:Q", title="Gap end", format=",.0f"),
-                        alt.Tooltip("gap_size:Q", title="Skipped span", format=",.0f"),
-                    ],
-                )
-            )
-    layers.append(labels)
-
-    st.altair_chart(
-        alt.layer(*layers).properties(height=chart_height),
+    if st.button(
+        "Open TALE Detail",
+        key=f"open_family_page_{int(selected_row['tale_id'])}",
         use_container_width=True,
-    )
+    ):
+        selected_id = int(selected_row["tale_id"])
+        st.session_state["tale_detail_id"] = selected_id
+        st.session_state["tale_detail_last_query_id"] = selected_id
+        st.query_params["tale_id"] = str(selected_id)
+        if hasattr(st, "switch_page"):
+            st.switch_page("pages/07_TALE_Detail.py")
 
 
 def render_label_table(plot_df: pd.DataFrame) -> None:
@@ -496,62 +728,48 @@ def render_unplaced_table(unplaced_tales: pd.DataFrame) -> None:
     st.dataframe(unplaced, use_container_width=True, height=table_height)
 
 
-scope_samples = load_scope_samples()
-if scope_samples.empty:
-    st.warning("No TALE-linked sample metadata available.")
-    st.stop()
+def render_selection_summary(
+    selected_species: str, selected_pathovar: str, selected_sample_row: pd.Series
+) -> None:
+    st.markdown(f"**Selected Species:** {selected_species}")
+    st.markdown(f"**Selected Pathovar:** {selected_pathovar}")
+    st.markdown(f"**Selected Sample / Strain:** {sample_option_label(selected_sample_row)}")
 
-selected_species, selected_pathovar, sample_scope = select_scope_samples(scope_samples)
-current_scope = f"{selected_species} | {selected_pathovar}"
-previous_scope = st.session_state.get("genome_org_previous_scope")
 
-if previous_scope != current_scope:
-    st.session_state.pop("genome_org_sample_id", None)
-st.session_state["genome_org_previous_scope"] = current_scope
+def render_selected_tale_from_rows(rows: pd.DataFrame) -> None:
+    selected_tale_id = st.session_state.get("genome_org_selected_tale_id")
+    if selected_tale_id is None or rows.empty:
+        return
 
-selected_sample_id, selected_sample_row = select_sample(sample_scope)
+    matching_rows = rows[rows["tale_id"].astype(int) == int(selected_tale_id)]
+    if matching_rows.empty:
+        return
 
-tales = prepare_tales(int(selected_sample_id))
-if tales.empty:
-    st.info("No TALEs found for the selected sample.")
-    st.stop()
+    st.query_params["tale_id"] = str(int(selected_tale_id))
+    render_selected_tale(matching_rows.iloc[0])
 
-available_assemblies = tales["assembly_label"].drop_duplicates().tolist()
-selected_assemblies = st.multiselect(
-    "Assemblies / replicons",
-    available_assemblies,
-    default=available_assemblies,
-)
-compress_gaps = st.checkbox("Compress empty genome regions", value=True)
-st.markdown(f"**Selected Species:** {selected_species}")
-st.markdown(f"**Selected Pathovar:** {selected_pathovar}")
-st.markdown(f"**Selected Sample / Strain:** {sample_option_label(selected_sample_row)}")
 
-plot_tales, unplaced_tales = prepare_plot_tales(
-    tales,
-    selected_assemblies=selected_assemblies,
-)
-if plot_tales.empty:
-    if unplaced_tales.empty:
-        st.info("No TALEs match the current filters.")
-        st.stop()
-    st.info("This sample has TALEs, but none with genomic coordinates for the current filters.")
-    plot_df = pd.DataFrame()
-    collapsed_intervals = pd.DataFrame()
-else:
-    if compress_gaps:
-        plot_df, collapsed_intervals = compress_empty_regions(
-            plot_tales,
-            min_gap_size=DEFAULT_GAP_THRESHOLD,
-            retained_gap_size=RETAINED_GAP_SIZE,
+def build_selected_tale_rows(tales: pd.DataFrame) -> pd.DataFrame:
+    selected_rows = tales.copy()
+    if "feature_len" not in selected_rows.columns:
+        selected_rows["feature_len"] = selected_rows["end_pos"] - selected_rows["start_pos"]
+    if "protein_len" not in selected_rows.columns:
+        selected_rows["protein_len"] = selected_rows["protein_seq"].fillna("").str.len()
+    if "strand_label" not in selected_rows.columns:
+        selected_rows["strand_label"] = selected_rows["strand"].map({1: "+", -1: "-"}).fillna("?")
+    if "pseudo_label" not in selected_rows.columns:
+        selected_rows["pseudo_label"] = selected_rows["is_pseudo"].fillna(0).astype(int).map(
+            {0: "No", 1: "Yes"}
         )
-    else:
-        plot_df = plot_tales.copy()
-        plot_df["start_plot"] = plot_df["start_pos"]
-        plot_df["end_plot"] = plot_df["end_pos"]
-        collapsed_intervals = pd.DataFrame()
+    return selected_rows
 
-if not plot_df.empty:
+
+def render_plot_section(
+    plot_df: pd.DataFrame,
+    collapsed_intervals: pd.DataFrame,
+    compress_gaps: bool,
+    selected_tale_rows: pd.DataFrame,
+) -> None:
     plot_df["plot_len"] = plot_df["end_plot"] - plot_df["start_plot"]
     families = sorted(plot_df["family"].dropna().unique().tolist())
     colors_by_family = family_color_map(families)
@@ -562,20 +780,33 @@ if not plot_df.empty:
     summary_mid.metric("Families", plot_df["family"].nunique())
     summary_right.metric("Assemblies", plot_df["assembly_label"].nunique())
 
+    clicked_tale_id = None
     for assembly_label in plot_df["assembly_label"].drop_duplicates().tolist():
-        render_assembly_chart(
+        event_tale_id = render_assembly_chart(
             plot_df[plot_df["assembly_label"] == assembly_label].copy(),
             all_families=families,
             colors_by_family=colors_by_family,
             compress_gaps=compress_gaps,
             collapsed_intervals=collapsed_intervals,
+            selected_tale_id=st.session_state.get("genome_org_selected_tale_id"),
         )
+        if event_tale_id is not None:
+            clicked_tale_id = int(event_tale_id)
+
+    if clicked_tale_id is not None and (
+        st.session_state.get("genome_org_selected_tale_id") != clicked_tale_id
+    ):
+        st.session_state["genome_org_selected_tale_id"] = clicked_tale_id
+        st.query_params["tale_id"] = str(clicked_tale_id)
+        rerun_page()
 
     st.caption(
-        "Each bar is one TALE. Numbers inside bars map to the label table below. "
+        "Each bar is one TALE. Click a bar to select it. "
         "Separate lanes show strand within each assembly/replicon. "
         "Pseudo TALEs are semi-transparent."
     )
+
+    render_selected_tale_from_rows(selected_tale_rows)
 
     if compress_gaps and not collapsed_intervals.empty:
         st.caption("Dashed lines mark collapsed genome intervals with no TALEs.")
@@ -595,8 +826,55 @@ if not plot_df.empty:
                 height=table_height,
             )
 
-    st.subheader("TALE Labels")
-    render_label_table(plot_df)
+    with st.expander("TALE Labels", expanded=False):
+        render_label_table(plot_df)
+
+
+scope_samples = load_scope_samples()
+if scope_samples.empty:
+    st.warning("No TALE-linked sample metadata available.")
+    st.stop()
+
+apply_pending_navigation_selection(scope_samples)
+selected_from_query = to_int(st.query_params.get("tale_id"))
+apply_query_tale_selection(scope_samples, selected_from_query)
+
+selected_species, selected_pathovar, sample_scope = select_scope_samples(scope_samples)
+current_scope = f"{selected_species} | {selected_pathovar}"
+st.session_state["genome_org_previous_scope"] = current_scope
+
+selected_sample_id, selected_sample_row = select_sample(sample_scope)
+initialize_selected_tale_state()
+
+tales = prepare_tales(int(selected_sample_id))
+if tales.empty:
+    st.info("No TALEs found for the selected sample.")
+    st.stop()
+
+available_assemblies = tales["assembly_label"].drop_duplicates().tolist()
+selected_assemblies = initialize_assembly_filter(available_assemblies)
+compress_gaps = st.checkbox("Compress empty genome regions", value=True)
+render_selection_summary(selected_species, selected_pathovar, selected_sample_row)
+
+plot_df, collapsed_intervals, unplaced_tales = build_plot_data(
+    tales,
+    selected_assemblies=selected_assemblies,
+    compress_gaps=compress_gaps,
+)
+selected_tale_rows = build_selected_tale_rows(tales)
+if plot_df.empty:
+    if unplaced_tales.empty:
+        st.info("No TALEs match the current filters.")
+        st.stop()
+    st.info("This sample has TALEs, but none with genomic coordinates for the current filters.")
+    render_selected_tale_from_rows(selected_tale_rows)
+else:
+    render_plot_section(
+        plot_df,
+        collapsed_intervals,
+        compress_gaps,
+        selected_tale_rows,
+    )
 
 if not unplaced_tales.empty:
     render_unplaced_table(unplaced_tales)

@@ -303,11 +303,13 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
 def set_selected_tale_id(tale_id: int | None) -> None:
     if tale_id is None:
         st.session_state["selected_tale_id"] = None
+        st.session_state["family_last_query_tale_id"] = None
         if "tale_id" in st.query_params:
             del st.query_params["tale_id"]
         return
     selected = int(tale_id)
     st.session_state["selected_tale_id"] = selected
+    st.session_state["family_last_query_tale_id"] = selected
     st.query_params["tale_id"] = str(selected)
 
 
@@ -357,12 +359,17 @@ st.session_state["family_idx"] = max(
 )
 
 selected_from_query = st.query_params.get("tale_id")
+last_query_tale_id = st.session_state.get("family_last_query_tale_id")
 if selected_from_query:
     try:
         selected_query_id = int(selected_from_query)
-        if selected_query_id in tale_to_family:
+        if (
+            selected_query_id in tale_to_family
+            and selected_query_id != last_query_tale_id
+        ):
             set_selected_tale_id(selected_query_id)
             st.session_state["family_idx"] = family_options.index(tale_to_family[selected_query_id])
+            st.session_state["family_selected_tale_control"] = selected_query_id
     except ValueError:
         pass
 
@@ -384,7 +391,14 @@ with left:
     current_family_name = family_options[st.session_state["family_idx"]]
     if all_tale_options:
         current_family_tales = family_to_tale_ids.get(current_family_name, [])
-        control_selected_tale_id = selected_id
+        if (
+            selected_id in all_tale_options
+            and st.session_state.get("family_selected_tale_control") != selected_id
+        ):
+            st.session_state["family_selected_tale_control"] = selected_id
+        control_selected_tale_id = st.session_state.get(
+            "family_selected_tale_control", selected_id
+        )
         if control_selected_tale_id not in all_tale_options:
             if current_family_tales:
                 control_selected_tale_id = current_family_tales[0]
@@ -392,10 +406,12 @@ with left:
                 control_selected_tale_id = all_tale_options[0]
             set_selected_tale_id(control_selected_tale_id)
             selected_id = control_selected_tale_id
+        if st.session_state.get("family_selected_tale_control") != control_selected_tale_id:
+            st.session_state["family_selected_tale_control"] = control_selected_tale_id
         selected_tale = st.selectbox(
             "Select a TALE:",
             all_tale_options,
-            index=all_tale_options.index(control_selected_tale_id),
+            key="family_selected_tale_control",
             format_func=lambda tale_id: f"{tale_id}: {tale_name_by_id.get(tale_id, '')}",
         )
         if selected_tale != control_selected_tale_id:
@@ -404,6 +420,13 @@ with left:
             if selected_family_for_tale in family_options:
                 st.session_state["family_idx"] = family_options.index(selected_family_for_tale)
             st.rerun()
+        selected_detail_tale_id = int(st.session_state.get("family_selected_tale_control"))
+        if st.button("Open selected TALE detail", use_container_width=True):
+            st.session_state["tale_detail_id"] = selected_detail_tale_id
+            st.session_state["tale_detail_last_query_id"] = selected_detail_tale_id
+            st.query_params["tale_id"] = str(selected_detail_tale_id)
+            if hasattr(st, "switch_page"):
+                st.switch_page("pages/07_TALE_Detail.py")
     st.markdown("---")
 
     def select_first_tale_for_family(family_name: str) -> None:

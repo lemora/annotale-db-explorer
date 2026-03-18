@@ -314,3 +314,57 @@ def load_strain_tales(strain_id: int) -> pd.DataFrame:
         """,
         params=[int(strain_id)],
     )
+
+
+@st.cache_data(show_spinner=False)
+def load_tale_options() -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT t.id AS tale_id,
+               t.legacy_name AS tale_name
+        FROM tale t
+        ORDER BY t.id
+        """
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_tale_detail(tale_id: int) -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT t.id AS tale_id,
+               t.legacy_name AS tale_name,
+               t.dna_seq,
+               t.protein_seq,
+               t.start_pos,
+               t.end_pos,
+               t.strand,
+               t.is_new,
+               t.is_pseudo,
+               fm.family_id AS family,
+               a.id AS assembly_id,
+               a.accession,
+               a.version,
+               a.accession_type,
+               a.replicon_type,
+               s.id AS sample_id,
+               s.biosample_id,
+               s.legacy_strain_name,
+               s.strain_name,
+               s.geo_tag,
+               s.collection_date,
+               tx.id AS taxonomy_id,
+               tx.ncbi_tax_id,
+               tx.rank AS taxonomy_rank,
+               tx.raw_name AS taxon_name,
+               tx.species,
+               tx.pathovar
+        FROM tale t
+        LEFT JOIN tale_family_member fm ON fm.tale_id = t.id
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        LEFT JOIN samples s ON s.id = a.sample_id
+        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
+        WHERE t.id = ?
+        """,
+        params=[int(tale_id)],
+    )
