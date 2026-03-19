@@ -61,9 +61,10 @@ BOX_HEIGHT = 18
 ESTIMATED_CHART_WIDTH_PX = 1600.0
 MIN_BOX_SVG_WIDTH = 14
 MAX_BOX_SVG_WIDTH = 2400
-LABEL_CHAR_WIDTH = 13
-LABEL_WIDTH_PADDING = 10
+LABEL_CHAR_WIDTH = 11
+LABEL_WIDTH_PADDING = 6
 LABEL_FONT_SCALE = 0.66
+LABEL_DOWNSCALE_DELAY_PX = 40
 MIN_LABEL_FONT_SIZE = 10.5
 MAX_LABEL_FONT_SIZE = 14.5
 FAMILY_COLORS = [
@@ -167,7 +168,8 @@ def add_box_svg_assets(
     label_lengths = svg_ready["plot_number_label"].str.len().clip(lower=1)
     svg_ready["label_natural_width"] = (label_lengths * LABEL_CHAR_WIDTH) + LABEL_WIDTH_PADDING
     svg_ready["label_font_size"] = (
-        (svg_ready["box_svg_width"] / label_lengths) * LABEL_FONT_SCALE
+        ((svg_ready["box_svg_width"] + LABEL_DOWNSCALE_DELAY_PX) / label_lengths)
+        * LABEL_FONT_SCALE
     ).clip(lower=MIN_LABEL_FONT_SIZE, upper=MAX_LABEL_FONT_SIZE)
     svg_ready["box_svg"] = svg_ready.apply(
         lambda row: build_plot_box_svg(

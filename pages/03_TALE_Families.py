@@ -253,7 +253,7 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
         --tale-table-border: #e5e7eb;
         --tale-table-header-bg: #f9fafb;
         --tale-table-hover-bg: #fff0e6;
-        --tale-table-selected-bg: """ + SELECTED_ACCENT + """;
+        --tale-table-selected-bg: {SELECTED_ACCENT};
         --tale-table-selected-text: #ffffff;
       }}
 
