@@ -13,6 +13,7 @@ from utils.db import (
     load_tales,
 )
 from utils.page import init_page
+from utils.theme import PSEUDO_TALE_GREY, SELECTED_ACCENT
 from utils.taxonomy import (
     abbreviate_taxon_labels,
     apply_taxon_fallback,
@@ -252,7 +253,7 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
         --tale-table-border: #e5e7eb;
         --tale-table-header-bg: #f9fafb;
         --tale-table-hover-bg: #fff0e6;
-        --tale-table-selected-bg: #ff7f0e;
+        --tale-table-selected-bg: """ + SELECTED_ACCENT + """;
         --tale-table-selected-text: #ffffff;
       }}
 
@@ -534,9 +535,9 @@ spec = {
         "order": {"field": "order", "type": "quantitative"},
         "color": {
             "condition": [
-                {"test": "datum.is_selected === true", "value": "#ff7f0e"},
-                {"test": "datum.tale_id != null && datum.tale_id == leaf.tale_id", "value": "#ff7f0e"},
-                {"test": "datum.is_leaf === true && datum.is_pseudo == 1", "value": "#6b7280"},
+                {"test": "datum.is_selected === true", "value": SELECTED_ACCENT},
+                {"test": "datum.tale_id != null && datum.tale_id == leaf.tale_id", "value": SELECTED_ACCENT},
+                {"test": "datum.is_leaf === true && datum.is_pseudo == 1", "value": PSEUDO_TALE_GREY},
                 {"test": "datum.is_leaf === true", "value": "#1f77b4"},
             ],
             "value": "#bdbdbd",

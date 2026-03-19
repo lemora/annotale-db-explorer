@@ -6,6 +6,7 @@ from urllib.parse import quote
 from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
 from utils.page import init_page
 from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
+from utils.theme import blue_card_dark_mode_css
 
 init_page("Genome Organization", "Genome Organization")
 st.title("TALE Genomic Organization")
@@ -39,24 +40,15 @@ st.markdown(
         color: #374235;
         margin: 0.28rem 0;
     }
-    @media (prefers-color-scheme: dark) {
-        .selected-tale-card {
-            border-color: #35546a;
-            background: linear-gradient(180deg, #132531 0%, #1a3444 100%);
-        }
-        .selected-tale-name {
-            color: #eef6fb;
-        }
-        .selected-tale-sub {
-            color: #aac4d8;
-        }
-        .selected-tale-label {
-            color: #d7e9f5;
-        }
-        .selected-tale-line {
-            color: #dceaf3;
-        }
-    }
+    """
+    + blue_card_dark_mode_css(
+        card_selector=".selected-tale-card",
+        title_selector=".selected-tale-name",
+        sub_selector=".selected-tale-sub",
+        label_selector=".selected-tale-label",
+        text_selector=".selected-tale-line",
+    )
+    + """
     </style>
     """,
     unsafe_allow_html=True,
@@ -156,12 +148,6 @@ def build_plot_box_svg(
     return "data:image/svg+xml;utf8," + quote(svg, safe="")
 
 
-def add_box_label_metrics(plot_df: pd.DataFrame) -> pd.DataFrame:
-    labeled = plot_df.copy()
-    labeled["box_span"] = labeled["end_plot"] - labeled["start_plot"]
-    return labeled
-
-
 def add_box_svg_assets(
     assembly_tales: pd.DataFrame,
     assembly_domain: list[float],
@@ -171,6 +157,7 @@ def add_box_svg_assets(
     px_per_plot_unit = ESTIMATED_CHART_WIDTH_PX / chart_domain_span
 
     svg_ready = assembly_tales.copy()
+    svg_ready["box_span"] = svg_ready["end_plot"] - svg_ready["start_plot"]
     svg_ready["box_svg_width"] = (
         (svg_ready["box_span"] * px_per_plot_unit)
         .round()
@@ -870,7 +857,6 @@ def render_plot_section(
     families = sorted(plot_df["family"].dropna().unique().tolist())
     colors_by_family = family_color_map(families)
     plot_df["family_color"] = plot_df["family"].map(colors_by_family)
-    plot_df = add_box_label_metrics(plot_df)
 
     summary_left, summary_mid, summary_right = st.columns(3)
     summary_left.metric("TALEs", len(plot_df))
