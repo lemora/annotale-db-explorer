@@ -9,27 +9,15 @@ Streamlit app for interactive exploration of the local `data/annotale.db` SQLite
 - Navigate TALE family trees with linked TALE selection.
 - Compare family counts by species/pathovar/strain.
 - Visualize sample geography on a country-level map.
+- Inspect TALE genomic organization across assemblies and strands.
+- Open a dedicated TALE detail view with sequence downloads and external links.
 
 ## Requirements
 
-- Python 3.10 or newer
 - `data/annotale.db` file in the repository
-
-## Setup
-
-```bash
-pip install -r requirements.txt
-```
+- Docker with Compose support
 
 ## Run
-
-```bash
-python -m streamlit run app.py
-```
-
-Then open the local URL shown by Streamlit (usually `http://localhost:8501`).
-
-## Run with Docker
 
 ```bash
 docker compose up --build -d
@@ -46,13 +34,14 @@ docker compose down
 ## Project Structure
 
 - `app.py`: Streamlit entrypoint and page navigation
+- `.streamlit/config.toml`: Streamlit client configuration
 - `pages/`: page rendering and page-local logic
 - `utils/db.py`: centralized SQL/database query layer
-- `utils/`: shared helpers (page setup, taxonomy helpers, tree helpers)
+- `utils/`: shared helpers for page setup, taxonomy handling, tree layout, and theme constants
 - `data/annotale.db`: SQLite data source
 
 ## Troubleshooting
 
 - If the app starts but shows no data, verify `data/annotale.db` exists.
-- If dependencies are missing, rerun `pip install -r requirements.txt`.
+- If Docker is already running an old image, rebuild with `docker compose up --build -d`.
 - If Streamlit cache looks stale after DB updates, clear cache from Streamlit settings and rerun.
