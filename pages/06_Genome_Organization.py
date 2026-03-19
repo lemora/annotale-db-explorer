@@ -1,6 +1,7 @@
 import altair as alt
 import pandas as pd
 import streamlit as st
+from urllib.parse import quote
 
 from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
 from utils.page import init_page
@@ -38,6 +39,24 @@ st.markdown(
         color: #374235;
         margin: 0.28rem 0;
     }
+    @media (prefers-color-scheme: dark) {
+        .selected-tale-card {
+            border-color: #35546a;
+            background: linear-gradient(180deg, #132531 0%, #1a3444 100%);
+        }
+        .selected-tale-name {
+            color: #eef6fb;
+        }
+        .selected-tale-sub {
+            color: #aac4d8;
+        }
+        .selected-tale-label {
+            color: #d7e9f5;
+        }
+        .selected-tale-line {
+            color: #dceaf3;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -46,6 +65,15 @@ st.markdown(
 DEFAULT_SAMPLE_ID = 4
 DEFAULT_GAP_THRESHOLD = 100_000
 RETAINED_GAP_SIZE = 25_000
+BOX_HEIGHT = 18
+ESTIMATED_CHART_WIDTH_PX = 1600.0
+MIN_BOX_SVG_WIDTH = 14
+MAX_BOX_SVG_WIDTH = 2400
+LABEL_CHAR_WIDTH = 9
+LABEL_WIDTH_PADDING = 5
+LABEL_FONT_SCALE = 0.66
+MIN_LABEL_FONT_SIZE = 10.5
+MAX_LABEL_FONT_SIZE = 14.5
 FAMILY_COLORS = [
     "#4E79A7",
     "#F28E2B",
@@ -90,6 +118,82 @@ LABEL_TABLE_COLUMNS = [
     "protein_len",
     "pseudo_label",
 ]
+
+
+def build_plot_box_svg(
+    fill_color: str,
+    label: str,
+    box_svg_width: int,
+    label_font_size: float,
+    label_natural_width: int,
+    *,
+    selected: bool = False,
+) -> str:
+    inner_label_width = max(1, min(box_svg_width - 4, label_natural_width))
+    inner_label_x = max(0, (box_svg_width - inner_label_width) / 2)
+    selected_border = (
+        f"<rect class='selected-border' x='0.5' y='0.5' width='{max(0, box_svg_width - 1)}' "
+        f"height='{BOX_HEIGHT - 1}' fill='none' "
+        "stroke='#111111' stroke-width='2' vector-effect='non-scaling-stroke'/>"
+        if selected
+        else ""
+    )
+    svg = (
+        f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {box_svg_width} {BOX_HEIGHT}' preserveAspectRatio='none'>"
+        "<style>"
+        ".selected-border { stroke: #111111; }"
+        "@media (prefers-color-scheme: dark) { .selected-border { stroke: #ffffff; } }"
+        "</style>"
+        f"<rect x='0' y='0' width='{box_svg_width}' height='{BOX_HEIGHT}' fill='{fill_color}'/>"
+        f"{selected_border}"
+        f"<svg x='{inner_label_x:.2f}' y='0' width='{inner_label_width}' height='{BOX_HEIGHT}' "
+        f"viewBox='0 0 {label_natural_width} {BOX_HEIGHT}' preserveAspectRatio='xMidYMid meet'>"
+        f"<text x='{label_natural_width / 2}' y='10.1' text-anchor='middle' dominant-baseline='middle' "
+        f"font-family='Arial, sans-serif' font-size='{label_font_size:.2f}' font-weight='400' fill='#111111'>{label}</text>"
+        "</svg>"
+        "</svg>"
+    )
+    return "data:image/svg+xml;utf8," + quote(svg, safe="")
+
+
+def add_box_label_metrics(plot_df: pd.DataFrame) -> pd.DataFrame:
+    labeled = plot_df.copy()
+    labeled["box_span"] = labeled["end_plot"] - labeled["start_plot"]
+    return labeled
+
+
+def add_box_svg_assets(
+    assembly_tales: pd.DataFrame,
+    assembly_domain: list[float],
+    selected_tale_id: int | None,
+) -> pd.DataFrame:
+    chart_domain_span = max(assembly_domain[1] - assembly_domain[0], 1.0)
+    px_per_plot_unit = ESTIMATED_CHART_WIDTH_PX / chart_domain_span
+
+    svg_ready = assembly_tales.copy()
+    svg_ready["box_svg_width"] = (
+        (svg_ready["box_span"] * px_per_plot_unit)
+        .round()
+        .clip(lower=MIN_BOX_SVG_WIDTH, upper=MAX_BOX_SVG_WIDTH)
+        .astype(int)
+    )
+    label_lengths = svg_ready["plot_number_label"].str.len().clip(lower=1)
+    svg_ready["label_natural_width"] = (label_lengths * LABEL_CHAR_WIDTH) + LABEL_WIDTH_PADDING
+    svg_ready["label_font_size"] = (
+        (svg_ready["box_svg_width"] / label_lengths) * LABEL_FONT_SCALE
+    ).clip(lower=MIN_LABEL_FONT_SIZE, upper=MAX_LABEL_FONT_SIZE)
+    svg_ready["box_svg"] = svg_ready.apply(
+        lambda row: build_plot_box_svg(
+            row["family_color"],
+            row["plot_number_label"],
+            int(row["box_svg_width"]),
+            float(row["label_font_size"]),
+            int(row["label_natural_width"]),
+            selected=selected_tale_id is not None and int(row["tale_id"]) == int(selected_tale_id),
+        ),
+        axis=1,
+    )
+    return svg_ready
 
 
 def to_int(value: str | None) -> int | None:
@@ -250,12 +354,14 @@ def apply_query_tale_selection(
     st.session_state["genome_org_pathovar"] = sample_row["pathovar_display"]
     st.session_state["genome_org_sample_id"] = int(query_sample_id)
     st.session_state["genome_org_selected_tale_id"] = int(selected_tale_id)
-    st.session_state["genome_org_target_assembly"] = assembly_label_from_parts(
-        query_row.get("assembly_id"),
-        query_row.get("accession"),
-        query_row.get("replicon_type"),
-    )
+    if st.session_state.get("genome_org_query_select_focus_assembly", True):
+        st.session_state["genome_org_target_assembly"] = assembly_label_from_parts(
+            query_row.get("assembly_id"),
+            query_row.get("accession"),
+            query_row.get("replicon_type"),
+        )
     st.session_state["genome_org_last_query_tale_id"] = int(selected_tale_id)
+    st.session_state["genome_org_query_select_focus_assembly"] = True
 
 
 def apply_pending_navigation_selection(scope_samples: pd.DataFrame) -> None:
@@ -447,7 +553,6 @@ def prepare_plot_tales(
     ).reset_index(drop=True)
     filtered["plot_number"] = filtered.index + 1
     filtered["plot_number_label"] = filtered["plot_number"].astype(str)
-    filtered["number_min_width"] = filtered["plot_number_label"].str.len() * 65
     return filtered, without_coords.drop_duplicates(subset=["tale_id"]).copy()
 
 
@@ -541,6 +646,8 @@ def render_assembly_chart(
     assembly_domain = [domain_start, domain_max + domain_padding]
     st.subheader(assembly_label)
     tale_tooltip = [
+        alt.Tooltip("tale_id:Q", title="TALE ID", format=".0f"),
+        alt.Tooltip("plot_number:Q", title="plot TALE number", format=".0f"),
         alt.Tooltip("tale_name:N", title="TALE"),
         alt.Tooltip("family:N", title="Family"),
         alt.Tooltip("strand_label:N", title="Strand"),
@@ -562,9 +669,15 @@ def render_assembly_chart(
         name=selection_name,
     )
 
+    assembly_tales = add_box_svg_assets(
+        assembly_tales,
+        assembly_domain=assembly_domain,
+        selected_tale_id=selected_tale_id,
+    )
+
     chart = (
         alt.Chart(assembly_tales)
-        .mark_bar(size=18)
+        .mark_image(aspect=False, height=BOX_HEIGHT)
         .encode(
             x=alt.X(
                 "start_plot:Q",
@@ -579,28 +692,11 @@ def render_assembly_chart(
             x2="end_plot:Q",
             y=alt.Y("lane:N", title=None, sort=lane_order, axis=alt.Axis(labelLimit=500)),
             detail=alt.Detail("tale_id:N"),
-            color=alt.Color(
-                "family:N",
-                legend=None,
-                scale=alt.Scale(
-                    domain=all_families,
-                    range=[colors_by_family[family] for family in all_families],
-                ),
-            ),
+            url=alt.Url("box_svg:N"),
             opacity=alt.condition(
                 tale_select,
                 alt.value(1.0),
                 alt.value(0.9),
-            ),
-            stroke=alt.condition(
-                f"datum.tale_id == {selected_tale_id}" if selected_tale_id is not None else "false",
-                alt.value("#111111"),
-                alt.value("transparent"),
-            ),
-            strokeWidth=alt.condition(
-                f"datum.tale_id == {selected_tale_id}" if selected_tale_id is not None else "false",
-                alt.value(2),
-                alt.value(0),
             ),
             tooltip=tale_tooltip,
         )
@@ -622,7 +718,7 @@ def render_assembly_chart(
     clicked_id = extract_selected_id(event)
     if clicked_id is not None:
         return clicked_id
-    return selected_tale_id
+    return None
 
 
 def render_selected_tale(selected_row: pd.Series) -> None:
@@ -686,8 +782,8 @@ def render_label_table(plot_df: pd.DataFrame) -> None:
     label_table["family color"] = label_table["family color"].fillna("#cccccc")
     display_table = label_table[
         [
-            "id",
             "plot TALE number",
+            "id",
             "name",
             "family",
             "family color",
@@ -710,6 +806,7 @@ def render_label_table(plot_df: pd.DataFrame) -> None:
         lambda value: "font-weight: 700;",
         subset=["plot TALE number"],
     )
+    styler = styler.hide(axis="index")
     st.dataframe(styler, use_container_width=True, height=table_height)
 
 
@@ -770,10 +867,10 @@ def render_plot_section(
     compress_gaps: bool,
     selected_tale_rows: pd.DataFrame,
 ) -> None:
-    plot_df["plot_len"] = plot_df["end_plot"] - plot_df["start_plot"]
     families = sorted(plot_df["family"].dropna().unique().tolist())
     colors_by_family = family_color_map(families)
     plot_df["family_color"] = plot_df["family"].map(colors_by_family)
+    plot_df = add_box_label_metrics(plot_df)
 
     summary_left, summary_mid, summary_right = st.columns(3)
     summary_left.metric("TALEs", len(plot_df))
@@ -797,11 +894,14 @@ def render_plot_section(
         st.session_state.get("genome_org_selected_tale_id") != clicked_tale_id
     ):
         st.session_state["genome_org_selected_tale_id"] = clicked_tale_id
+        st.session_state["genome_org_last_query_tale_id"] = clicked_tale_id
+        st.session_state["genome_org_query_select_focus_assembly"] = False
         st.query_params["tale_id"] = str(clicked_tale_id)
         rerun_page()
 
     st.caption(
-        "Each bar is one TALE. Click a bar to select it. "
+        "Each box is one TALE, and the in-box label matches the plot TALE number. "
+        "Click a box to select it. "
         "Separate lanes show strand within each assembly/replicon. "
         "Pseudo TALEs are semi-transparent."
     )
@@ -826,8 +926,8 @@ def render_plot_section(
                 height=table_height,
             )
 
-    with st.expander("TALE Labels", expanded=False):
-        render_label_table(plot_df)
+    st.subheader("TALE Labels")
+    render_label_table(plot_df)
 
 
 scope_samples = load_scope_samples()

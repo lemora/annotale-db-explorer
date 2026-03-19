@@ -159,6 +159,43 @@ st.markdown(
         color: #5d6657;
         font-size: 0.92rem;
     }
+    @media (prefers-color-scheme: dark) {
+        .tale-hero {
+            border-color: #35546a;
+            background:
+                radial-gradient(circle at top right, rgba(109, 166, 205, 0.22), transparent 34%),
+                linear-gradient(145deg, #132531 0%, #1a3444 100%);
+        }
+        .tale-kicker {
+            color: #aac4d8;
+        }
+        .tale-title {
+            color: #eef6fb;
+        }
+        .tale-meta {
+            color: #dceaf3;
+        }
+        .tale-meta-label {
+            color: #d7e9f5;
+        }
+        .tale-meta-value {
+            color: #dceaf3;
+        }
+        .tale-chip {
+            background: #274457;
+            color: #e8f3fa;
+        }
+        .link-card {
+            border-color: #35546a;
+            background: #132531;
+        }
+        .link-card strong {
+            color: #eef6fb;
+        }
+        .link-card span {
+            color: #aac4d8;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,

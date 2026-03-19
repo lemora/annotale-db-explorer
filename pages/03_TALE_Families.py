@@ -536,7 +536,7 @@ spec = {
             "condition": [
                 {"test": "datum.is_selected === true", "value": "#ff7f0e"},
                 {"test": "datum.tale_id != null && datum.tale_id == leaf.tale_id", "value": "#ff7f0e"},
-                {"test": "datum.is_leaf === true && datum.is_pseudo == 1", "value": "#000000"},
+                {"test": "datum.is_leaf === true && datum.is_pseudo == 1", "value": "#6b7280"},
                 {"test": "datum.is_leaf === true", "value": "#1f77b4"},
             ],
             "value": "#bdbdbd",
