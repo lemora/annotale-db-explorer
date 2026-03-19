@@ -118,32 +118,36 @@ def build_plot_box_svg(
     label: str,
     box_svg_width: int,
     label_font_size: float,
-    label_natural_width: int,
+    label_text_width: int,
+    label_text_x: float,
+    label_color: str,
+    selected_border_color: str,
     *,
     selected: bool = False,
 ) -> str:
-    inner_label_width = max(1, min(box_svg_width - 4, label_natural_width))
-    inner_label_x = max(0, (box_svg_width - inner_label_width) / 2)
+    clip_width = max(1, min(box_svg_width - 4, label_text_width))
+    clip_x = max(0.0, (box_svg_width - clip_width) / 2.0)
     selected_border = (
-        f"<rect class='selected-border' x='0.5' y='0.5' width='{max(0, box_svg_width - 1)}' "
-        f"height='{BOX_HEIGHT - 1}' fill='none' "
-        "stroke='#111111' stroke-width='2' vector-effect='non-scaling-stroke'/>"
+        f"<rect x='1' y='1' width='{max(0, box_svg_width - 2)}' "
+        f"height='{max(0, BOX_HEIGHT - 2)}' fill='none' "
+        f"stroke='{selected_border_color}' stroke-width='1.5' "
+        "shape-rendering='crispEdges' vector-effect='non-scaling-stroke'/>"
         if selected
         else ""
     )
     svg = (
         f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {box_svg_width} {BOX_HEIGHT}' preserveAspectRatio='none'>"
-        "<style>"
-        ".selected-border { stroke: #111111; }"
-        "@media (prefers-color-scheme: dark) { .selected-border { stroke: #ffffff; } }"
-        "</style>"
-        f"<rect x='0' y='0' width='{box_svg_width}' height='{BOX_HEIGHT}' fill='{fill_color}'/>"
+        f"<rect x='0' y='0' width='{box_svg_width}' height='{BOX_HEIGHT}' fill='{fill_color}' "
+        "shape-rendering='crispEdges'/>"
         f"{selected_border}"
-        f"<svg x='{inner_label_x:.2f}' y='0' width='{inner_label_width}' height='{BOX_HEIGHT}' "
-        f"viewBox='0 0 {label_natural_width} {BOX_HEIGHT}' preserveAspectRatio='xMidYMid meet'>"
-        f"<text x='{label_natural_width / 2}' y='10.1' text-anchor='middle' dominant-baseline='middle' "
-        f"font-family='Arial, sans-serif' font-size='{label_font_size:.2f}' font-weight='400' fill='#111111'>{label}</text>"
-        "</svg>"
+        "<defs>"
+        "<clipPath id='label-clip'>"
+        f"<rect x='{clip_x:.2f}' y='0' width='{clip_width}' height='{BOX_HEIGHT}' />"
+        "</clipPath>"
+        "</defs>"
+        f"<text x='{label_text_x:.2f}' y='50%' dy='0.35em' text-anchor='middle' clip-path='url(#label-clip)' "
+        "font-family='sans-serif' text-rendering='geometricPrecision' "
+        f"font-size='{label_font_size:.2f}' font-weight='400' fill='{label_color}'>{label}</text>"
         "</svg>"
     )
     return "data:image/svg+xml;utf8," + quote(svg, safe="")
@@ -153,6 +157,9 @@ def add_box_svg_assets(
     assembly_tales: pd.DataFrame,
     assembly_domain: list[float],
     selected_tale_id: int | None,
+    *,
+    label_color: str,
+    selected_border_color: str,
 ) -> pd.DataFrame:
     chart_domain_span = max(assembly_domain[1] - assembly_domain[0], 1.0)
     px_per_plot_unit = ESTIMATED_CHART_WIDTH_PX / chart_domain_span
@@ -171,6 +178,7 @@ def add_box_svg_assets(
         ((svg_ready["box_svg_width"] + LABEL_DOWNSCALE_DELAY_PX) / label_lengths)
         * LABEL_FONT_SCALE
     ).clip(lower=MIN_LABEL_FONT_SIZE, upper=MAX_LABEL_FONT_SIZE)
+    svg_ready["label_text_x"] = svg_ready["box_svg_width"] / 2.0
     svg_ready["box_svg"] = svg_ready.apply(
         lambda row: build_plot_box_svg(
             row["family_color"],
@@ -178,6 +186,9 @@ def add_box_svg_assets(
             int(row["box_svg_width"]),
             float(row["label_font_size"]),
             int(row["label_natural_width"]),
+            float(row["label_text_x"]),
+            label_color,
+            selected_border_color,
             selected=selected_tale_id is not None and int(row["tale_id"]) == int(selected_tale_id),
         ),
         axis=1,
@@ -650,6 +661,7 @@ def render_assembly_chart(
     x_axis = alt.Axis()
     if compress_gaps:
         x_axis = alt.Axis(labelExpr=compressed_axis_label_expr(assembly_gaps))
+    is_dark_theme = st.get_option("theme.base") == "dark"
     tale_select = alt.selection_point(
         fields=["tale_id"],
         on="click",
@@ -662,6 +674,8 @@ def render_assembly_chart(
         assembly_tales,
         assembly_domain=assembly_domain,
         selected_tale_id=selected_tale_id,
+        label_color="#111111",
+        selected_border_color="#ffffff" if is_dark_theme else "#111111",
     )
 
     chart = (
