@@ -6,7 +6,7 @@ from urllib.parse import quote
 from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
 from utils.page import init_page
 from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
-from utils.theme import blue_card_dark_mode_css
+from utils.theme import SELECTED_ACCENT, blue_card_dark_mode_css
 
 init_page("Genome Organization", "Genome Organization")
 st.title("TALE Genomic Organization")
@@ -125,9 +125,9 @@ def build_plot_box_svg(
     inner_label_width = max(1, min(box_svg_width - 4, label_natural_width))
     inner_label_x = max(0, (box_svg_width - inner_label_width) / 2)
     selected_border = (
-        f"<rect class='selected-border' x='0.5' y='0.5' width='{max(0, box_svg_width - 1)}' "
-        f"height='{BOX_HEIGHT - 1}' fill='none' "
-        "stroke='#111111' stroke-width='2' vector-effect='non-scaling-stroke'/>"
+        f"<rect class='selected-border' x='1' y='1' width='{max(0, box_svg_width - 2)}' "
+        f"height='{max(0, BOX_HEIGHT - 2)}' fill='none' "
+        "stroke='#111111' stroke-width='2'/>"
         if selected
         else ""
     )
@@ -786,11 +786,27 @@ def render_label_table(plot_df: pd.DataFrame) -> None:
         ]
     ].rename(columns={"assembly_label": "assembly"})
 
+    selected_tale_id = st.session_state.get("genome_org_selected_tale_id")
+
+    def highlight_selected_row(row: pd.Series) -> list[str]:
+        if selected_tale_id is not None and int(row["id"]) == int(selected_tale_id):
+            styles = []
+            for column in row.index:
+                cell_style = (
+                    f"border-top: 1px solid {SELECTED_ACCENT}; border-bottom: 1px solid {SELECTED_ACCENT};"
+                )
+                if column != "family color":
+                    cell_style += f" background-color: {SELECTED_ACCENT}22;"
+                styles.append(cell_style)
+            return styles
+        return ["" for _ in row]
+
     table_height = min(900, max(160, 35 * (len(display_table) + 1)))
     styler = display_table.style.map(
         lambda value: f"background-color: {value}; color: {value};",
         subset=["family color"],
     )
+    styler = styler.apply(highlight_selected_row, axis=1)
     styler = styler.map(
         lambda value: "font-weight: 700;",
         subset=["plot TALE number"],

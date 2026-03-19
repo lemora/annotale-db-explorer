@@ -285,9 +285,10 @@ if nav_col2.button("Open in Genome Organization", key=f"to_genome_{int(row['tale
     if pd.notna(sample_id):
         st.session_state["genome_org_pending_sample_id"] = int(sample_id)
     st.session_state["genome_org_pending_tale_id"] = selected_id
-    st.session_state["genome_org_pending_assembly"] = assembly_display
-    st.session_state["genome_org_target_assembly"] = assembly_display
-    st.session_state["genome_org_assemblies"] = [assembly_display]
+    st.session_state.pop("genome_org_pending_assembly", None)
+    st.session_state.pop("genome_org_target_assembly", None)
+    st.session_state.pop("genome_org_assemblies", None)
+    st.session_state["genome_org_query_select_focus_assembly"] = False
     st.session_state["genome_org_previous_scope"] = None
     st.query_params["tale_id"] = str(selected_id)
     if hasattr(st, "switch_page"):
