@@ -11,5 +11,5 @@ pages = [
     st.Page("pages/07_TALE_Detail.py", title="TALE Detail"),
 ]
 
-navigation = st.navigation(pages)
+navigation = st.navigation(pages, position="hidden")
 navigation.run()
