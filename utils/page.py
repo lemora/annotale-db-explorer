@@ -34,7 +34,11 @@ def db_unavailable_reason() -> str | None:
 
 
 def init_page(page_title: str, active_page: str, require_db: bool = True) -> None:
-    st.set_page_config(page_title=page_title, layout="wide")
+    st.set_page_config(
+        page_title=page_title,
+        page_icon="img/AnnoTALE_transp.png",
+        layout="wide",
+    )
     reason = db_unavailable_reason()
     if reason is not None:
         st.error(reason)
