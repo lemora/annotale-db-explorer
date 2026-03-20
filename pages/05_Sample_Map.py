@@ -32,6 +32,10 @@ if "sample_map_prev_country" not in st.session_state:
 if pending_country is not None:
     st.session_state["selected_country"] = pending_country
     st.session_state["sample_map_prev_country"] = pending_country
+    st.session_state["sample_map_tax_filter"] = "All"
+    st.session_state.pop("sample_map_taxon", None)
+    st.session_state["sample_map_view_mode"] = "Static"
+    st.session_state["sample_map_prev_view"] = "Static"
     if pending_taxon is not None:
         st.session_state[f"sample_map_species_breakdown_{pending_country}_selected_taxon"] = pending_taxon
         st.session_state[f"sample_map_species_breakdown_{pending_country}_last_chart_taxon"] = pending_taxon
@@ -337,8 +341,12 @@ else:
     mappable["count"] = mappable["count"].astype(float)
     counts_max = float(mappable["count"].max())
     sizes = (mappable["count"] / counts_max * 24 + 6).tolist()
-    fig = go.Figure(
-        data=go.Scattergeo(
+    if "selected_country" not in st.session_state:
+        st.session_state["selected_country"] = "All"
+    selected_country = st.session_state["selected_country"]
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scattergeo(
             lat=mappable["lat"].tolist(),
             lon=mappable["lon"].tolist(),
             text=mappable["country"].tolist(),
@@ -356,6 +364,24 @@ else:
             hovertemplate="%{text}<br>Samples: %{marker.color}<extra></extra>",
         )
     )
+    selected_marker = mappable[mappable["country"] == selected_country]
+    if not selected_marker.empty:
+        fig.add_trace(
+            go.Scattergeo(
+                lat=selected_marker["lat"].tolist(),
+                lon=selected_marker["lon"].tolist(),
+                text=selected_marker["country"].tolist(),
+                customdata=selected_marker["country"].tolist(),
+                mode="markers",
+                marker=dict(
+                    size=(selected_marker["count"] / counts_max * 24 + 12).tolist(),
+                    color="rgba(0,0,0,0)",
+                    line=dict(width=3, color="#111111"),
+                ),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
     fig.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         geo=dict(
@@ -379,12 +405,14 @@ else:
 
     st.subheader("Country Selection")
     country_options = ["All"] + sorted(located["country"].dropna().unique().tolist())
-    if "selected_country" not in st.session_state:
-        st.session_state["selected_country"] = "All"
     if selected:
         point_idx = selected[0].get("pointIndex")
         if point_idx is not None and point_idx < len(mappable):
-            st.session_state["selected_country"] = mappable.iloc[point_idx]["country"]
+            clicked_country = mappable.iloc[point_idx]["country"]
+            if st.session_state.get("selected_country") != clicked_country:
+                st.session_state["selected_country"] = clicked_country
+                st.session_state["sample_map_prev_country"] = clicked_country
+                st.rerun()
     selected_country = st.selectbox(
         "Select a country to inspect samples",
         country_options,
