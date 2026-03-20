@@ -4,8 +4,7 @@ import streamlit as st
 
 from utils.db import (
     load_strains,
-    load_tales,
-    load_taxonomy_comparison_source,
+    load_tale_distribution_source,
 )
 from utils.page import init_page
 from utils.taxonomy import (
@@ -15,30 +14,10 @@ from utils.taxonomy import (
 )
 
 LENGTH_SOURCES = ["Genomic coordinates", "DNA sequence", "Protein sequence"]
-DISCREPANCY_LABELS = {
-    -1: "-1 (ei)",
-    0: "0 (ee)",
-    2: "2 (stop+ei)",
-    3: "3 (stop + ee)",
-    6: "6 (aa+stop+ee)",
-    21: "21",
-    30: "30",
-}
-DISCREPANCY_ORDER = [
-    "-1 (ei)",
-    "0 (ee)",
-    "2 (stop+ei)",
-    "3 (stop + ee)",
-    "6 (aa+stop+ee)",
-    "21",
-    "30",
-]
-
-
 def apply_tale_filters(
     df: pd.DataFrame, exclude_pseudo: bool, exclude_missing_genomic: bool
 ) -> pd.DataFrame:
-    filtered = df.copy()
+    filtered = df
     if exclude_pseudo:
         filtered = filtered[filtered["is_pseudo"].fillna(0) == 0]
     if exclude_missing_genomic:
@@ -48,150 +27,29 @@ def apply_tale_filters(
     return filtered
 
 
-def add_length_column(df: pd.DataFrame, source: str) -> pd.DataFrame:
+def add_length_column(df: pd.DataFrame, source: str) -> pd.Series:
     if source == "Genomic coordinates":
-        df["length"] = df["end_pos"] - df["start_pos"] + 1
-    elif source == "DNA sequence":
-        df["length"] = df["dna_seq"].fillna("").str.len()
-    else:
-        df["length"] = df["protein_seq"].fillna("").str.len()
-    return df
+        return df["end_pos"] - df["start_pos"] + 1
+    if source == "DNA sequence":
+        return df["dna_length"]
+    return df["protein_length"]
 
-init_page("Distributions", "Distributions")
-st.title("Distributions and Summary")
 
-tales = load_tales()
-strains = load_strains()
+@st.cache_data(show_spinner=False)
+def build_length_source(
+    source: str, exclude_pseudo: bool, exclude_missing_genomic: bool
+) -> pd.DataFrame:
+    tales = load_tale_distribution_source()
+    filtered = apply_tale_filters(tales, exclude_pseudo, exclude_missing_genomic).copy()
+    filtered["length"] = add_length_column(filtered, source)
+    filtered = filtered[pd.notnull(filtered["length"]) & (filtered["length"] > 0)]
+    return filtered[["length"]]
 
-if tales.empty:
-    st.warning("No TALE records found.")
-    st.stop()
 
-st.subheader("TALE Lengths")
-length_source = st.selectbox("Length source", LENGTH_SOURCES, index=0)
-exclude_pseudo = st.checkbox("Exclude pseudo TALEs", value=True)
-exclude_missing_genomic = st.checkbox(
-    "Exclude TALEs without genomic positions", value=False
-)
-
-lengths = apply_tale_filters(tales, exclude_pseudo, exclude_missing_genomic)
-lengths = add_length_column(lengths, length_source)
-lengths = lengths[pd.notnull(lengths["length"]) & (lengths["length"] > 0)]
-
-len_chart = (
-    alt.Chart(lengths)
-    .mark_bar()
-    .encode(
-        x=alt.X("length:Q", bin=alt.Bin(maxbins=60), title="Length"),
-        y=alt.Y("count():Q", title="Number of TALEs"),
-        tooltip=["count():Q"],
-    )
-)
-
-st.altair_chart(len_chart.properties(height=300), use_container_width=True)
-
-# with st.expander(
-#     "TALEs where DNA length differs from genomic length",
-#     expanded=False,
-# ):
-#     length_compare = lengths.copy()
-#     length_compare["genomic_length"] = (
-#         length_compare["end_pos"] - length_compare["start_pos"]
-#     )
-#     length_compare["dna_length"] = length_compare["dna_seq"].fillna("").str.len()
-#     length_compare["dna_last3"] = (
-#         length_compare["dna_seq"].fillna("").str.upper().str[-3:]
-#     )
-#     length_compare["dna_ends_with_stop"] = (
-#         length_compare["dna_seq"]
-#         .fillna("")
-#         .str.upper()
-#         .str.endswith(("TAA", "TAG", "TGA"))
-#     )
-#     metric_left, metric_right = st.columns(2)
-#     comparable = length_compare[
-#         length_compare["genomic_length"].notnull()
-#         & (length_compare["genomic_length"] > 0)
-#         & (length_compare["dna_length"] > 0)
-#     ]
-#     length_compare = comparable[
-#         comparable["genomic_length"] != comparable["dna_length"]
-#     ]
-#     table_data = comparable.assign(
-#         genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
-#     )
-#     metric_left.metric("Number of TALEs", len(comparable))
-#     metric_right.metric("TALEs with length discrepancy", len(length_compare))
-#     if length_compare.empty:
-#         st.info("No TALEs found with differing lengths under the current filters.")
-#     else:
-#         st.caption("Genomic (e-s) minus DNA length")
-#         stats = (
-#             comparable[["genomic_length", "dna_length"]]
-#             .assign(
-#                 genomic_minus_dna=lambda df: df["genomic_length"] - df["dna_length"]
-#             )
-#             .groupby("genomic_minus_dna")
-#             .size()
-#             .reset_index(name="count")
-#         )
-#         stats = stats[stats["genomic_minus_dna"].isin(DISCREPANCY_LABELS.keys())]
-#         stats["label"] = stats["genomic_minus_dna"].map(DISCREPANCY_LABELS)
-#         stats = (
-#             stats.set_index("label")
-#             .reindex(DISCREPANCY_ORDER, fill_value=0)
-#             .reset_index()
-#         )
-#         bar_chart = (
-#             alt.Chart(stats)
-#             .mark_bar()
-#             .encode(
-#                 x=alt.X(
-#                     "label:N",
-#                     title="Genomic (e-s) - DNA length",
-#                     sort=DISCREPANCY_ORDER,
-#                 ),
-#                 y=alt.Y("count:Q", title="TALE count"),
-#                 tooltip=["label:N", "count:Q"],
-#             )
-#         )
-#         label_chart = (
-#             alt.Chart(stats)
-#             .mark_text(dy=-6)
-#             .encode(
-#                 x=alt.X("label:N", sort=DISCREPANCY_ORDER),
-#                 y=alt.Y("count:Q"),
-#                 text=alt.Text("count:Q"),
-#             )
-#         )
-#         st.altair_chart(
-#             (bar_chart + label_chart).properties(height=220),
-#             use_container_width=True,
-#         )
-#         st.dataframe(
-#             table_data[
-#                 [
-#                     "id",
-#                     "name",
-#                     "strain_id",
-#                     "start_pos",
-#                     "end_pos",
-#                     "strand",
-#                     "genomic_length",
-#                     "dna_length",
-#                     "genomic_minus_dna",
-#                     "dna_last3",
-#                     "dna_ends_with_stop",
-#                 ]
-#             ].rename(columns={"genomic_length": "genomic_length (e-s)"}),
-#             use_container_width=True,
-#             height=260,
-#         )
-
-st.subheader("TALEs by Strain / Species + Pathovar")
-if strains.empty:
-    st.info("No strain metadata available.")
-else:
+@st.cache_data(show_spinner=False)
+def build_distribution_counts(view: str) -> pd.DataFrame:
+    tales = load_tale_distribution_source()
+    strains = load_strains()
     tales_with_strain = tales.merge(
         strains[
             [
@@ -208,6 +66,80 @@ else:
         how="left",
         suffixes=("", "_strain"),
     )
+
+    if view == "Strain":
+        counts = (
+            tales_with_strain.assign(
+                label=tales_with_strain["name"].fillna("Unknown")
+            )
+            .groupby("label")
+            .size()
+            .reset_index(name="count")
+        )
+        return counts.sort_values("count", ascending=False)
+
+    include_pathovar = view == "Species + Pathovar"
+    legacy_map = build_legacy_taxon_map(
+        strains,
+        include_pathovar=include_pathovar,
+        legacy_col="legacy_strain_name",
+        sample_id_col="id",
+    )
+    labels = apply_taxon_fallback(
+        tales_with_strain,
+        include_pathovar=include_pathovar,
+        legacy_map=legacy_map,
+        id_col="strain_id",
+        legacy_col="legacy_strain_name",
+    )
+    labels = abbreviate_taxon_labels(labels)
+    counts = (
+        tales_with_strain.assign(label=labels)
+        .groupby("label")
+        .size()
+        .reset_index(name="count")
+    )
+    return counts.sort_values("count", ascending=False)
+
+init_page("Distributions", "Distributions")
+st.title("Distributions and Summary")
+
+strains = load_strains()
+tales = load_tale_distribution_source()
+
+if tales.empty:
+    st.warning("No TALE records found.")
+    st.stop()
+
+st.subheader("TALE Lengths")
+length_source = st.selectbox("Length source", LENGTH_SOURCES, index=0)
+exclude_pseudo = st.checkbox("Exclude pseudo TALEs", value=True)
+exclude_missing_genomic = st.checkbox(
+    "Exclude TALEs without genomic positions", value=False
+)
+
+lengths = build_length_source(
+    length_source,
+    exclude_pseudo,
+    exclude_missing_genomic,
+)
+
+len_chart = (
+    alt.Chart(lengths)
+    .mark_bar()
+    .encode(
+        x=alt.X("length:Q", bin=alt.Bin(maxbins=60), title="Length"),
+        y=alt.Y("count():Q", title="Number of TALEs"),
+        tooltip=["count():Q"],
+    )
+)
+
+st.altair_chart(len_chart.properties(height=300), use_container_width=True)
+
+st.subheader("TALEs by Strain / Species + Pathovar")
+if strains.empty:
+    st.info("No strain metadata available.")
+else:
     view = st.radio(
         "TALE distribution view",
         ["Species", "Species + Pathovar", "Strain"],
@@ -216,33 +148,8 @@ else:
         key="dist_view",
         label_visibility="collapsed",
     )
-    if view == "Strain":
-        tales_with_strain["strain"] = tales_with_strain["name_strain"].fillna("Unknown")
-        y_field = "strain"
-        y_title = "Strain"
-    else:
-        include_pathovar = view == "Species + Pathovar"
-        legacy_map = build_legacy_taxon_map(
-            strains,
-            include_pathovar=include_pathovar,
-            legacy_col="legacy_strain_name",
-            sample_id_col="id",
-        )
-        tales_with_strain["species_pathovar"] = apply_taxon_fallback(
-            tales_with_strain,
-            include_pathovar=include_pathovar,
-            legacy_map=legacy_map,
-            id_col="strain_id",
-            legacy_col="legacy_strain_name",
-        )
-        tales_with_strain["species_pathovar"] = abbreviate_taxon_labels(
-            tales_with_strain["species_pathovar"]
-        )
-        y_field = "species_pathovar"
-        y_title = "Species" if view == "Species" else "Species + Pathovar"
-
-    counts = tales_with_strain.groupby(y_field).size().reset_index(name="count")
-    counts = counts.sort_values("count", ascending=False)
+    counts = build_distribution_counts(view)
+    y_title = "Strain" if view == "Strain" else view
 
     show_all_labels = st.checkbox("Show all labels", value=False)
     chart_height = max(400, 18 * len(counts)) if show_all_labels else 400
@@ -257,13 +164,13 @@ else:
         .mark_bar()
         .encode(
             y=alt.Y(
-                f"{y_field}:N",
+                "label:N",
                 sort="-x",
                 title=y_title,
                 axis=y_axis,
             ),
             x=alt.X("count:Q", title="TALE count"),
-            tooltip=[f"{y_field}:N", "count:Q"],
+            tooltip=["label:N", "count:Q"],
         )
     )
     st.altair_chart(strain_chart.properties(height=chart_height), use_container_width=True)

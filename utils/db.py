@@ -83,6 +83,23 @@ def load_tales() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def load_tale_distribution_source() -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT t.id,
+               t.is_pseudo,
+               a.sample_id AS strain_id,
+               t.start_pos,
+               t.end_pos,
+               length(t.dna_seq) AS dna_length,
+               length(t.protein_seq) AS protein_length
+        FROM tale t
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        """
+    )
+
+
+@st.cache_data(show_spinner=False)
 def load_strains() -> pd.DataFrame:
     df = query_df(
         "SELECT s.id AS id, "
