@@ -243,19 +243,19 @@ def sample_option_label(row: pd.Series) -> str:
 
 def map_country_from_geo_tag(value: str | None) -> str:
     if value is None:
-        return "All"
+        return "Unknown"
     cleaned = str(value).strip()
     if not cleaned:
-        return "All"
+        return "Unknown"
     if cleaned.lower() in {"-", "unknown", "missing"}:
-        return "All"
+        return "Unknown"
     if ":" in cleaned:
         cleaned = cleaned.split(":", 1)[0].strip()
     if "," in cleaned:
         cleaned = cleaned.split(",", 1)[0].strip()
     if cleaned.lower() in {"-", "unknown", "missing"}:
-        return "All"
-    return cleaned or "All"
+        return "Unknown"
+    return cleaned or "Unknown"
 
 
 def sample_map_species_pathovar_label(selected_species: str, selected_pathovar: str) -> str:

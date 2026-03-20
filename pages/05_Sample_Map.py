@@ -74,6 +74,17 @@ st.markdown(
         color: #374235;
         margin: 0 0 0.8rem 0;
     }
+    @media (prefers-color-scheme: dark) {
+        .sample-nav-kicker {
+            color: #aac4d8;
+        }
+        .sample-nav-title {
+            color: #eef6fb;
+        }
+        .sample-nav-text {
+            color: #dceaf3;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -334,7 +345,7 @@ selected_country = "All"
 
 if mappable.empty:
     st.info("No mappable locations found for the current filters.")
-    selected_rows = located
+    selected_rows = missing_country if st.session_state.get("selected_country") == "Unknown" else located
 else:
     mappable["lat"] = mappable["lat"].astype(float)
     mappable["lon"] = mappable["lon"].astype(float)
@@ -405,6 +416,8 @@ else:
 
     st.subheader("Country Selection")
     country_options = ["All"] + sorted(located["country"].dropna().unique().tolist())
+    if not missing_country.empty:
+        country_options.append("Unknown")
     if selected:
         point_idx = selected[0].get("pointIndex")
         if point_idx is not None and point_idx < len(mappable):
@@ -424,6 +437,7 @@ else:
         previous_country = st.session_state.get("sample_map_prev_country")
         previous_prefix = f"sample_map_species_breakdown_{previous_country}"
         current_prefix = f"sample_map_species_breakdown_{selected_country}"
+        st.session_state["selected_country"] = selected_country
         st.session_state.pop(f"{previous_prefix}_selected_taxon", None)
         st.session_state.pop(f"{previous_prefix}_last_chart_taxon", None)
         st.session_state.pop(
@@ -445,9 +459,12 @@ else:
             None,
         )
         st.session_state["sample_map_prev_country"] = selected_country
+        st.rerun()
 
     selected_rows = located
-    if selected_country != "All":
+    if selected_country == "Unknown":
+        selected_rows = missing_country
+    elif selected_country != "All":
         selected_rows = located[located["country"] == selected_country]
 
 if selected_rows.empty:
