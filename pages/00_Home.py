@@ -5,7 +5,10 @@ from utils.page import init_page
 
 init_page("Home", "Home", require_db=False)
 st.title("AnnoTALE DB Explorer")
-st.caption("Interactive explorer for the AnnoTALE SQLite database.")
+st.caption(
+    "Interactive explorer for the "
+    "[AnnoTALE](https://github.com/jstacs/annotale) SQLite database."
+)
 
 st.image("img/AnnoTALE_transp.png", width=220)
 st.markdown(

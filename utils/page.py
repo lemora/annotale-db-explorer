@@ -50,7 +50,7 @@ def init_page(page_title: str, active_page: str, require_db: bool = True) -> Non
     browser_title = APP_TITLE if page_title == "Home" else f"{APP_TITLE}: {page_title}"
     st.set_page_config(
         page_title=browser_title,
-        page_icon="img/AnnoTALE_transp.png",
+        page_icon="img/AnnoTALE-db-explorer.png",
         layout="wide",
     )
     reason = db_unavailable_reason()
@@ -58,7 +58,7 @@ def init_page(page_title: str, active_page: str, require_db: bool = True) -> Non
         st.error(reason)
         if require_db:
             st.stop()
-    st.sidebar.image("img/AnnoTALE_transp.png", width=140)
+    st.sidebar.image("img/AnnoTALE-db-explorer.png", width=140)
     st.sidebar.markdown("### Navigation")
     for label, path in SIDEBAR_PAGES:
         st.sidebar.page_link(
