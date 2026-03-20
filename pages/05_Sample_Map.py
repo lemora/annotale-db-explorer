@@ -21,6 +21,46 @@ st.title("Sample Locations")
 st.caption("Country-level map; dot size indicates sample count.")
 if previous_page != "Sample Map":
     st.session_state["selected_country"] = "All"
+if "sample_map_prev_country" not in st.session_state:
+    st.session_state["sample_map_prev_country"] = st.session_state.get(
+        "selected_country", "All"
+    )
+
+st.markdown(
+    """
+    <style>
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 16px;
+        border: 1px solid #d9dfd2;
+        background:
+            radial-gradient(circle at top right, rgba(174, 196, 136, 0.35), transparent 34%),
+            linear-gradient(145deg, #f7f4ea 0%, #eef4e6 100%);
+    }
+    .sample-nav-card {
+        padding: 0 0 0.3rem 0;
+    }
+    .sample-nav-kicker {
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        color: #55624b;
+        margin-bottom: 0.35rem;
+    }
+    .sample-nav-title {
+        font-size: 1.2rem;
+        line-height: 1.1;
+        font-weight: 700;
+        color: #182018;
+        margin: 0 0 0.35rem 0;
+    }
+    .sample-nav-text {
+        color: #374235;
+        margin: 0 0 0.8rem 0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def parse_country(value: str | None) -> str | None:
@@ -138,6 +178,57 @@ def build_country_counts(source: pd.DataFrame) -> pd.DataFrame:
         lambda c: COUNTRY_CENTROIDS.get(c, (None, None))[1]
     )
     return counts
+
+
+@st.cache_data(show_spinner=False)
+def build_sample_selection_rows(selected_rows: pd.DataFrame) -> pd.DataFrame:
+    tax_rows = build_taxonomy_labels(True)
+    merged = selected_rows.merge(tax_rows, on="sample_id", how="left")
+    merged["species_pathovar"] = merged["species_pathovar"].fillna("Unknown")
+    return merged[
+        [
+            "sample_id",
+            "strain_display",
+            "country",
+            "species_pathovar",
+            "year",
+        ]
+    ].sort_values(["species_pathovar", "strain_display", "sample_id"]).reset_index(
+        drop=True
+    )
+
+
+def sample_option_label(row: pd.Series) -> str:
+    species_pathovar = str(row.get("species_pathovar") or "Unknown").strip() or "Unknown"
+    strain_display = str(row.get("strain_display") or "Unknown").strip() or "Unknown"
+    return f"{int(row['sample_id'])} | {strain_display} | {species_pathovar}"
+
+
+def extract_selected_species_pathovar(event_payload) -> str | None:
+    if not isinstance(event_payload, dict):
+        return None
+
+    def find_species_pathovar(value) -> str | None:
+        if isinstance(value, dict):
+            direct = value.get("species_pathovar")
+            if direct is not None:
+                return str(direct)
+            for nested in value.values():
+                found = find_species_pathovar(nested)
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for item in value:
+                found = find_species_pathovar(item)
+                if found is not None:
+                    return found
+        return None
+
+    selection = event_payload.get("selection", {})
+    found = find_species_pathovar(selection)
+    if found is not None:
+        return found
+    return None
 
 
 raw = build_sample_map_base()
@@ -287,6 +378,31 @@ else:
         if st.session_state["selected_country"] in country_options
         else 0,
     )
+    if selected_country != st.session_state.get("sample_map_prev_country"):
+        previous_country = st.session_state.get("sample_map_prev_country")
+        previous_prefix = f"sample_map_species_breakdown_{previous_country}"
+        current_prefix = f"sample_map_species_breakdown_{selected_country}"
+        st.session_state.pop(f"{previous_prefix}_selected_taxon", None)
+        st.session_state.pop(f"{previous_prefix}_last_chart_taxon", None)
+        st.session_state.pop(
+            f"sample_map_taxon_dropdown_{previous_country}",
+            None,
+        )
+        st.session_state.pop(
+            f"sample_map_sample_id_{previous_country}",
+            None,
+        )
+        st.session_state.pop(f"{current_prefix}_selected_taxon", None)
+        st.session_state.pop(f"{current_prefix}_last_chart_taxon", None)
+        st.session_state.pop(
+            f"sample_map_taxon_dropdown_{selected_country}",
+            None,
+        )
+        st.session_state.pop(
+            f"sample_map_sample_id_{selected_country}",
+            None,
+        )
+        st.session_state["sample_map_prev_country"] = selected_country
 
     selected_rows = located
     if selected_country != "All":
@@ -295,36 +411,155 @@ else:
 if selected_rows.empty:
     st.info("No samples for the selected country and filters.")
 else:
+    sample_rows = build_sample_selection_rows(selected_rows)
     sp_counts = (
-        selected_rows.groupby(["country"])
-        .size()
+        sample_rows["species_pathovar"]
+        .value_counts()
+        .rename_axis("species_pathovar")
         .reset_index(name="count")
+        .sort_values("count", ascending=False)
     )
     if selected_country == "All":
-        st.caption("Sample count by country")
-        st.dataframe(sp_counts, use_container_width=True, height=220)
-    else:
-        st.subheader("Species/Pathovar Breakdown")
-        tax_raw = build_taxonomy_labels(True)
-        selected_ids = selected_rows["sample_id"].tolist()
-        tax_filtered = tax_raw[tax_raw["sample_id"].isin(selected_ids)].copy()
-        sp_counts = (
-            tax_filtered["species_pathovar"]
-            .value_counts()
-            .rename_axis("species_pathovar")
+        country_counts = (
+            selected_rows.groupby(["country"])
+            .size()
             .reset_index(name="count")
             .sort_values("count", ascending=False)
         )
-        sp_chart = (
-            alt.Chart(sp_counts)
-            .mark_bar()
-            .encode(
-                x=alt.X("count:Q", title="Sample count", axis=alt.Axis(format="d")),
-                y=alt.Y("species_pathovar:N", sort="-x", title="Species + Pathovar"),
-                tooltip=["species_pathovar:N", "count:Q"],
-            )
+        with st.expander("Sample Count By Country", expanded=False):
+            st.dataframe(country_counts, use_container_width=True, height=220)
+    st.subheader("Species/Pathovar Breakdown")
+    chart_key = f"sample_map_species_breakdown_{selected_country}"
+    state_key = f"{chart_key}_selected_taxon"
+    chart_event_key = f"{chart_key}_last_chart_taxon"
+    dropdown_key = f"sample_map_taxon_dropdown_{selected_country}"
+    selected_species_pathovar = st.session_state.get(
+        dropdown_key,
+        st.session_state.get(state_key, "All"),
+    )
+    st.session_state[state_key] = selected_species_pathovar
+    taxon_select = alt.selection_point(
+        fields=["species_pathovar"],
+        on="click",
+        clear=False,
+        empty=False,
+        name="sample_map_taxon_select",
+    )
+    chart_data = sp_counts.copy()
+    chart_data["is_selected"] = chart_data["species_pathovar"].eq(selected_species_pathovar)
+    max_sample_count = int(chart_data["count"].max()) if not chart_data.empty else 0
+    x_tick_values = list(range(0, max_sample_count + 1))
+    sp_chart = (
+        alt.Chart(chart_data)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                "count:Q",
+                title="Sample count",
+                axis=alt.Axis(format="d", values=x_tick_values),
+            ),
+            y=alt.Y("species_pathovar:N", sort="-x", title="Species + Pathovar"),
+            color=alt.condition(
+                alt.datum.is_selected,
+                alt.value("#0F766E"),
+                alt.value("#B8C7C3"),
+            ),
+            stroke=alt.condition(
+                alt.datum.is_selected,
+                alt.value("#063B35"),
+                alt.value("#7F918C"),
+            ),
+            strokeWidth=alt.condition(
+                alt.datum.is_selected,
+                alt.value(2.5),
+                alt.value(0.6),
+            ),
+            opacity=alt.condition(alt.datum.is_selected, alt.value(1.0), alt.value(0.55)),
+            tooltip=["species_pathovar:N", "count:Q"],
         )
+        .add_params(taxon_select)
+    )
+
+    try:
+        event = st.vega_lite_chart(
+            sp_chart.to_dict(),
+            use_container_width=True,
+            theme="streamlit",
+            on_select="rerun",
+            key=chart_key,
+        )
+        clicked_species_pathovar = extract_selected_species_pathovar(event)
+        if clicked_species_pathovar is not None:
+            if st.session_state.get(chart_event_key) != clicked_species_pathovar:
+                st.session_state[chart_event_key] = clicked_species_pathovar
+                st.session_state[state_key] = clicked_species_pathovar
+                st.session_state[dropdown_key] = clicked_species_pathovar
+                st.rerun()
+    except TypeError:
         st.altair_chart(sp_chart.properties(height=300), use_container_width=True)
+
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="sample-nav-card">
+                <div class="sample-nav-kicker">Selection</div>
+                <div class="sample-nav-title">Open A Selected Sample</div>
+                <div class="sample-nav-text">
+                    Choose a species/pathovar scope and then open one of its associated samples in Genome Organization.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        taxon_options = ["All"] + sp_counts["species_pathovar"].tolist()
+        if selected_species_pathovar not in taxon_options:
+            selected_species_pathovar = "All"
+        if st.session_state.get(dropdown_key) not in taxon_options:
+            st.session_state[dropdown_key] = selected_species_pathovar
+        selected_species_pathovar = st.selectbox(
+            "Selected species + pathovar",
+            taxon_options,
+            key=dropdown_key,
+        )
+        st.session_state[state_key] = selected_species_pathovar
+        st.session_state[chart_event_key] = selected_species_pathovar
+
+        visible_samples = sample_rows
+        if selected_species_pathovar != "All":
+            visible_samples = sample_rows[
+                sample_rows["species_pathovar"] == selected_species_pathovar
+            ].copy()
+
+        if visible_samples.empty:
+            st.info("No samples found for the selected species/pathovar.")
+        else:
+            sample_options = visible_samples["sample_id"].tolist()
+            sample_dropdown_key = f"sample_map_sample_id_{selected_country}"
+            if st.session_state.get(sample_dropdown_key) not in sample_options:
+                st.session_state[sample_dropdown_key] = sample_options[0]
+            selected_sample_id = st.selectbox(
+                "Associated samples",
+                sample_options,
+                key=sample_dropdown_key,
+                format_func=lambda sample_id: sample_option_label(
+                    visible_samples.loc[
+                        visible_samples["sample_id"] == sample_id
+                    ].iloc[0]
+                ),
+            )
+            if st.button(
+                "Open In Genome Organization",
+                key=f"sample_map_open_genome_{selected_country}",
+                use_container_width=True,
+            ):
+                st.session_state["genome_org_pending_sample_id"] = int(selected_sample_id)
+                st.session_state.pop("genome_org_pending_tale_id", None)
+                st.session_state.pop("genome_org_pending_assembly", None)
+                st.session_state.pop("genome_org_target_assembly", None)
+                st.session_state.pop("genome_org_assemblies", None)
+                st.session_state["genome_org_previous_scope"] = None
+                if hasattr(st, "switch_page"):
+                    st.switch_page("pages/06_Genome_Organization.py")
 
 with st.expander("Samples Without Location", expanded=False):
     if missing_country.empty:
