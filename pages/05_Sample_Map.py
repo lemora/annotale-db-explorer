@@ -1,4 +1,5 @@
 import altair as alt
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from streamlit_plotly_events import plotly_events
@@ -11,6 +12,8 @@ from utils.taxonomy import (
     build_legacy_taxon_map,
 )
 
+INVALID_COUNTRY_LABELS = {"unknown", "missing", "-"}
+
 previous_page = st.session_state.get("active_page")
 init_page("Sample Map", "Sample Map")
 
@@ -19,12 +22,6 @@ st.caption("Country-level map; dot size indicates sample count.")
 if previous_page != "Sample Map":
     st.session_state["selected_country"] = "All"
 
-raw = load_sample_map_source()
-
-if raw.empty:
-    st.warning("No sample data available.")
-    st.stop()
-
 
 def parse_country(value: str | None) -> str | None:
     if value is None:
@@ -32,13 +29,13 @@ def parse_country(value: str | None) -> str | None:
     cleaned = str(value).strip()
     if not cleaned:
         return None
-    if cleaned.lower() in {"-", "unknown", "missing"}:
+    if cleaned.lower() in INVALID_COUNTRY_LABELS:
         return None
     if ":" in cleaned:
         cleaned = cleaned.split(":", 1)[0].strip()
     if "," in cleaned:
         cleaned = cleaned.split(",", 1)[0].strip()
-    if cleaned.lower() in {"-", "unknown", "missing"}:
+    if cleaned.lower() in INVALID_COUNTRY_LABELS:
         return None
     return cleaned
 
@@ -93,10 +90,61 @@ COUNTRY_CENTROIDS = {
     "Uruguay": (-32.5228, -55.7658),
 }
 
-raw["strain_display"] = raw["strain_name"].fillna(raw["legacy_strain_name"]).fillna(
-    "Unknown"
-)
-raw["country"] = raw["geo_tag"].apply(parse_country)
+
+@st.cache_data(show_spinner=False)
+def build_sample_map_base() -> pd.DataFrame:
+    raw = load_sample_map_source().copy()
+    raw["strain_display"] = raw["strain_name"].fillna(raw["legacy_strain_name"]).fillna(
+        "Unknown"
+    )
+    raw["country"] = raw["geo_tag"].apply(parse_country)
+    return raw
+
+
+@st.cache_data(show_spinner=False)
+def build_taxonomy_labels(include_pathovar: bool) -> pd.DataFrame:
+    tax_raw = load_sample_taxonomy().copy()
+    legacy_map = build_legacy_taxon_map(
+        tax_raw,
+        include_pathovar=include_pathovar,
+        legacy_col="legacy_strain_name",
+        sample_id_col="sample_id",
+    )
+    tax_raw["species_pathovar"] = apply_taxon_fallback(
+        tax_raw,
+        include_pathovar=include_pathovar,
+        legacy_map=legacy_map,
+        id_col="sample_id",
+        legacy_col="legacy_strain_name",
+    )
+    tax_raw["species_pathovar"] = abbreviate_taxon_labels(
+        tax_raw["species_pathovar"]
+    )
+    return tax_raw[["sample_id", "species_pathovar"]]
+
+
+@st.cache_data(show_spinner=False)
+def build_country_counts(source: pd.DataFrame) -> pd.DataFrame:
+    counts = (
+        source.groupby("country")
+        .size()
+        .reset_index(name="count")
+        .sort_values("count", ascending=False)
+    )
+    counts["lat"] = counts["country"].map(
+        lambda c: COUNTRY_CENTROIDS.get(c, (None, None))[0]
+    )
+    counts["lon"] = counts["country"].map(
+        lambda c: COUNTRY_CENTROIDS.get(c, (None, None))[1]
+    )
+    return counts
+
+
+raw = build_sample_map_base()
+
+if raw.empty:
+    st.warning("No sample data available.")
+    st.stop()
 
 tax_filter = st.radio(
     "Filter by taxonomy",
@@ -106,27 +154,10 @@ tax_filter = st.radio(
 )
 source = raw.copy()
 if tax_filter != "All":
-    tax_raw = load_sample_taxonomy()
+    tax_raw = build_taxonomy_labels(tax_filter == "Species + Pathovar")
     if tax_raw.empty:
         st.info("No taxonomy metadata available; showing all samples.")
     else:
-        include_pathovar = tax_filter == "Species + Pathovar"
-        legacy_map = build_legacy_taxon_map(
-            tax_raw,
-            include_pathovar=include_pathovar,
-            legacy_col="legacy_strain_name",
-            sample_id_col="sample_id",
-        )
-        tax_raw["species_pathovar"] = apply_taxon_fallback(
-            tax_raw,
-            include_pathovar=include_pathovar,
-            legacy_map=legacy_map,
-            id_col="sample_id",
-            legacy_col="legacy_strain_name",
-        )
-        tax_raw["species_pathovar"] = abbreviate_taxon_labels(
-            tax_raw["species_pathovar"]
-        )
         taxon_options = ["All"] + sorted(
             tax_raw["species_pathovar"].dropna().unique().tolist()
         )
@@ -184,21 +215,10 @@ located = located[
     .astype(str)
     .str.strip()
     .str.lower()
-    .isin({"unknown", "missing", "-"})
+    .isin(INVALID_COUNTRY_LABELS)
 ]
 
-counts = (
-    located.groupby("country")
-    .size()
-    .reset_index(name="count")
-    .sort_values("count", ascending=False)
-)
-counts["lat"] = counts["country"].map(
-    lambda c: COUNTRY_CENTROIDS.get(c, (None, None))[0]
-)
-counts["lon"] = counts["country"].map(
-    lambda c: COUNTRY_CENTROIDS.get(c, (None, None))[1]
-)
+counts = build_country_counts(located)
 
 mappable = counts.dropna(subset=["lat", "lon"]).copy()
 selected_country = "All"
@@ -285,26 +305,9 @@ else:
         st.dataframe(sp_counts, use_container_width=True, height=220)
     else:
         st.subheader("Species/Pathovar Breakdown")
-        tax_raw = load_sample_taxonomy()
+        tax_raw = build_taxonomy_labels(True)
         selected_ids = selected_rows["sample_id"].tolist()
         tax_filtered = tax_raw[tax_raw["sample_id"].isin(selected_ids)].copy()
-
-        legacy_map = build_legacy_taxon_map(
-            tax_raw,
-            include_pathovar=True,
-            legacy_col="legacy_strain_name",
-            sample_id_col="sample_id",
-        )
-        tax_filtered["species_pathovar"] = apply_taxon_fallback(
-            tax_filtered,
-            include_pathovar=True,
-            legacy_map=legacy_map,
-            id_col="sample_id",
-            legacy_col="legacy_strain_name",
-        )
-        tax_filtered["species_pathovar"] = abbreviate_taxon_labels(
-            tax_filtered["species_pathovar"]
-        )
         sp_counts = (
             tax_filtered["species_pathovar"]
             .value_counts()
