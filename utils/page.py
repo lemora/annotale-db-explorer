@@ -12,6 +12,8 @@ REQUIRED_TABLES = {
     "taxonomy",
 }
 
+APP_TITLE = "AnnoTALE DB Explorer"
+
 SIDEBAR_PAGES = [
     ("Home", "pages/00_Home.py"),
     ("DB Overview", "pages/01_DB_Overview.py"),
@@ -45,8 +47,9 @@ def db_unavailable_reason() -> str | None:
 
 
 def init_page(page_title: str, active_page: str, require_db: bool = True) -> None:
+    browser_title = APP_TITLE if page_title == "Home" else f"{APP_TITLE}: {page_title}"
     st.set_page_config(
-        page_title=page_title,
+        page_title=browser_title,
         page_icon="img/AnnoTALE_transp.png",
         layout="wide",
     )
