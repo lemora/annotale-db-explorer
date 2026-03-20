@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
 from utils.page import init_page
-from utils.taxonomy import apply_taxon_fallback, build_legacy_taxon_map
+from utils.taxonomy import abbreviate_taxon_labels, apply_taxon_fallback, build_legacy_taxon_map
 from utils.theme import SELECTED_ACCENT, blue_card_dark_mode_css
 
 init_page("Genome Organization", "Genome Organization")
@@ -239,6 +239,28 @@ def sample_option_label(row: pd.Series) -> str:
     if biosample_id and biosample_id.lower() != "nan":
         return f"{int(row['id'])} | {strain_name} | {biosample_id}"
     return f"{int(row['id'])} | {strain_name} | unknown biosample id"
+
+
+def map_country_from_geo_tag(value: str | None) -> str:
+    if value is None:
+        return "All"
+    cleaned = str(value).strip()
+    if not cleaned:
+        return "All"
+    if cleaned.lower() in {"-", "unknown", "missing"}:
+        return "All"
+    if ":" in cleaned:
+        cleaned = cleaned.split(":", 1)[0].strip()
+    if "," in cleaned:
+        cleaned = cleaned.split(",", 1)[0].strip()
+    if cleaned.lower() in {"-", "unknown", "missing"}:
+        return "All"
+    return cleaned or "All"
+
+
+def sample_map_species_pathovar_label(selected_species: str, selected_pathovar: str) -> str:
+    label = selected_species if selected_pathovar == "Unknown" else f"{selected_species} {selected_pathovar}"
+    return abbreviate_taxon_labels(pd.Series([label])).iloc[0]
 
 
 def sample_ids_with_tales() -> set[int]:
@@ -836,6 +858,17 @@ def render_selection_summary(
     st.markdown(f"**Selected Species:** {selected_species}")
     st.markdown(f"**Selected Pathovar:** {selected_pathovar}")
     st.markdown(f"**Selected Sample / Strain:** {sample_option_label(selected_sample_row)}")
+    if st.button("Open In Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
+        target_country = map_country_from_geo_tag(selected_sample_row.get("geo_tag"))
+        target_taxon = sample_map_species_pathovar_label(
+            selected_species,
+            selected_pathovar,
+        )
+        st.session_state["sample_map_pending_country"] = target_country
+        st.session_state["sample_map_pending_taxon"] = target_taxon
+        st.session_state["sample_map_pending_sample_id"] = int(selected_sample_row["id"])
+        if hasattr(st, "switch_page"):
+            st.switch_page("pages/05_Sample_Map.py")
 
 
 def render_selected_tale_from_rows(rows: pd.DataFrame) -> None:

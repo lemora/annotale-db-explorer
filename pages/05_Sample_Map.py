@@ -17,14 +17,27 @@ INVALID_COUNTRY_LABELS = {"unknown", "missing", "-"}
 previous_page = st.session_state.get("active_page")
 init_page("Sample Map", "Sample Map")
 
+pending_country = st.session_state.pop("sample_map_pending_country", None)
+pending_taxon = st.session_state.pop("sample_map_pending_taxon", None)
+pending_sample_id = st.session_state.pop("sample_map_pending_sample_id", None)
+
 st.title("Sample Locations")
 st.caption("Country-level map; dot size indicates sample count.")
-if previous_page != "Sample Map":
+if previous_page != "Sample Map" and pending_country is None:
     st.session_state["selected_country"] = "All"
 if "sample_map_prev_country" not in st.session_state:
     st.session_state["sample_map_prev_country"] = st.session_state.get(
         "selected_country", "All"
     )
+if pending_country is not None:
+    st.session_state["selected_country"] = pending_country
+    st.session_state["sample_map_prev_country"] = pending_country
+    if pending_taxon is not None:
+        st.session_state[f"sample_map_species_breakdown_{pending_country}_selected_taxon"] = pending_taxon
+        st.session_state[f"sample_map_species_breakdown_{pending_country}_last_chart_taxon"] = pending_taxon
+        st.session_state[f"sample_map_taxon_dropdown_{pending_country}"] = pending_taxon
+    if pending_sample_id is not None:
+        st.session_state[f"sample_map_sample_id_{pending_country}"] = int(pending_sample_id)
 
 st.markdown(
     """
@@ -199,9 +212,10 @@ def build_sample_selection_rows(selected_rows: pd.DataFrame) -> pd.DataFrame:
 
 
 def sample_option_label(row: pd.Series) -> str:
-    species_pathovar = str(row.get("species_pathovar") or "Unknown").strip() or "Unknown"
     strain_display = str(row.get("strain_display") or "Unknown").strip() or "Unknown"
-    return f"{int(row['sample_id'])} | {strain_display} | {species_pathovar}"
+    year = row.get("year")
+    year_display = str(int(year)) if pd.notna(year) else "year unknown"
+    return f"{int(row['sample_id'])} | {strain_display} ({year_display})"
 
 
 def extract_selected_species_pathovar(event_payload) -> str | None:

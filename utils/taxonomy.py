@@ -1,6 +1,11 @@
 import pandas as pd
 
 
+def normalize_taxon_text(series: pd.Series) -> pd.Series:
+    normalized = series.fillna("").astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    return normalized.replace("", pd.NA)
+
+
 def legacy_code(series: pd.Series) -> pd.Series:
     cleaned = series.fillna("").str.strip()
     code = cleaned.where(cleaned == "", cleaned.str.split().str[0])
@@ -14,10 +19,14 @@ def format_taxon(
     pathovar_col: str = "pathovar",
     taxon_name_col: str = "taxon_name",
 ) -> pd.Series:
-    species = df[species_col].fillna("").str.strip()
-    pathovar = df[pathovar_col].fillna("").str.strip()
-    taxon_name = df[taxon_name_col].fillna("").str.strip()
-    taxon_name = taxon_name.where(taxon_name != "", pd.NA)
+    species = normalize_taxon_text(df[species_col])
+    pathovar = normalize_taxon_text(
+        df[pathovar_col]
+        .fillna("")
+        .astype(str)
+        .str.replace(r"^(pv\.|pathovar)\s+", "", regex=True, case=False)
+    )
+    taxon_name = normalize_taxon_text(df[taxon_name_col])
     base = species.where(species != "", pd.NA)
     if include_pathovar:
         base = base + " " + pathovar.where(pathovar != "", "")
@@ -25,7 +34,8 @@ def format_taxon(
 
 
 def abbreviate_taxon_labels(series: pd.Series) -> pd.Series:
-    return series.str.replace("Xanthomonas", "X.", regex=False)
+    normalized = normalize_taxon_text(series)
+    return normalized.str.replace("Xanthomonas", "X.", regex=False)
 
 
 def build_legacy_taxon_map(
