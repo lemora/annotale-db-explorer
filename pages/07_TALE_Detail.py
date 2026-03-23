@@ -252,14 +252,7 @@ st.markdown(
 rvds = load_tale_rvds(selected_tale_id)
 
 nav_col1, nav_col2 = st.columns(2)
-if nav_col1.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_id'])}", use_container_width=True):
-    selected_id = int(row["tale_id"])
-    st.session_state["selected_tale_id"] = selected_id
-    st.session_state["family_selected_tale_control"] = selected_id
-    st.query_params["tale_id"] = str(selected_id)
-    if hasattr(st, "switch_page"):
-        st.switch_page("pages/03_TALE_Families.py")
-if nav_col2.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
+if nav_col1.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
     selected_id = int(row["tale_id"])
     sample_id = row.get("sample_id")
     species_display = coalesce_text(row.get("species"))
@@ -287,6 +280,13 @@ if nav_col2.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row[
     st.query_params["tale_id"] = str(selected_id)
     if hasattr(st, "switch_page"):
         st.switch_page("pages/06_Genome_Organization.py")
+if nav_col2.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_id'])}", use_container_width=True):
+    selected_id = int(row["tale_id"])
+    st.session_state["selected_tale_id"] = selected_id
+    st.session_state["family_selected_tale_control"] = selected_id
+    st.query_params["tale_id"] = str(selected_id)
+    if hasattr(st, "switch_page"):
+        st.switch_page("pages/03_TALE_Families.py")
 
 st.subheader("Links")
 link_cols = st.columns(3)

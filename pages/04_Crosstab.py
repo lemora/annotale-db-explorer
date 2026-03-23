@@ -9,7 +9,7 @@ from utils.taxonomy import (
     build_legacy_taxon_map,
 )
 
-init_page("Species/Pathovar/Strain vs. Family", "Crosstab")
+init_page("Crosstab", "Crosstab")
 st.title("Species/Pathovar/Strain vs. Family Cross-Tab")
 
 view = st.radio(

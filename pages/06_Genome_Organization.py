@@ -768,7 +768,7 @@ def render_selected_tale(selected_row: pd.Series) -> None:
     )
     if st.button(
         "🔎 Open TALE Detail",
-        key=f"open_family_page_{int(selected_row['tale_id'])}",
+        key=f"open_tale_detail_{int(selected_row['tale_id'])}",
         use_container_width=True,
     ):
         selected_id = int(selected_row["tale_id"])
@@ -877,7 +877,7 @@ def render_selection_summary(
     )
     action_col1, action_col2, _ = st.columns([1.15, 1.5, 6.2], gap="small")
     with action_col1:
-        if st.button("🌍 Open Strain in Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
+        if st.button("📍 Open Strain in Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
             target_country = map_country_from_geo_tag(selected_sample_row.get("geo_tag"))
             target_taxon = sample_map_species_pathovar_label(
                 selected_species,
@@ -964,17 +964,21 @@ def render_plot_section(
         st.query_params["tale_id"] = str(clicked_tale_id)
         rerun_page()
 
-    st.caption(
-        "Each box is one TALE, and the in-box label matches the plot TALE number. "
-        "Click a box to select it. "
-        "Separate lanes show strand within each assembly/replicon. "
-        "Pseudo TALEs are semi-transparent."
+    st.markdown(
+        (
+            "<p style='color: var(--text-color-secondary, #6b7280); font-size: 0.875rem;'>"
+            "Each box is one TALE, and the in-box label matches the plot TALE number. "
+            "Separate lanes show strand within each assembly/replicon. "
+            "Pseudo TALEs are semi-transparent.<br>"
+            "Click a box to select it."
+            "</p>"
+        ),
+        unsafe_allow_html=True,
     )
 
     render_selected_tale_from_rows(selected_tale_rows)
 
     if compress_gaps and not collapsed_intervals.empty:
-        st.caption("Dashed lines mark collapsed genome intervals with no TALEs.")
         with st.expander("Collapsed regions", expanded=False):
             table_height = min(320, max(120, 35 * (len(collapsed_intervals) + 1)))
             st.dataframe(
@@ -1026,6 +1030,8 @@ plot_df, collapsed_intervals, unplaced_tales = build_plot_data(
     selected_assemblies=selected_assemblies,
     compress_gaps=compress_gaps,
 )
+if compress_gaps and not collapsed_intervals.empty:
+    st.caption("Dashed lines mark collapsed genome intervals with no TALEs.")
 selected_tale_rows = build_selected_tale_rows(tales)
 if plot_df.empty:
     if unplaced_tales.empty:
