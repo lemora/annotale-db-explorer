@@ -5,12 +5,17 @@ import streamlit.components.v1 as components
 
 from utils.db import (
     load_families,
+    load_family_download_rows,
     load_family_members,
     load_family_rvd_counts,
     load_family_species_pathovar,
     load_family_tale_rows,
     load_tale_rvds,
     load_tales,
+)
+from utils.fasta_export import (
+    build_multi_fasta,
+    slugify_filename_part,
 )
 from utils.page import init_page
 from utils.theme import PSEUDO_TALE_GREY, SELECTED_ACCENT
@@ -422,7 +427,7 @@ with left:
                 st.session_state["family_idx"] = family_options.index(selected_family_for_tale)
             st.rerun()
         selected_detail_tale_id = int(st.session_state.get("family_selected_tale_control"))
-        if st.button("Open selected TALE detail", use_container_width=True):
+        if st.button("🔎 Open Selected TALE Detail", use_container_width=True):
             st.session_state["tale_detail_id"] = selected_detail_tale_id
             st.session_state["tale_detail_last_query_id"] = selected_detail_tale_id
             st.query_params["tale_id"] = str(selected_detail_tale_id)
@@ -457,6 +462,17 @@ with left:
         select_first_tale_for_family(selected_family)
         st.rerun()
     family_name = family_options[st.session_state["family_idx"]]
+    family_download_rows = load_family_download_rows(family_name)
+    family_fasta_payload = build_multi_fasta(family_download_rows, sort_columns=["tale_id"])
+    st.download_button(
+        "📥 Download Family TALEs as Genomic FASTA",
+        data=family_fasta_payload,
+        file_name=f"{slugify_filename_part(family_name)}_family_tales_as_genomic_fasta.fasta",
+        mime="text/plain",
+        disabled=not bool(family_fasta_payload),
+        help="Downloads genomic DNA sequences for all TALEs in the selected family.",
+        use_container_width=True,
+    )
 
 row = families[families["name"] == family_name].iloc[0]
 family_tales = family_to_tale_ids.get(family_name, [])

@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.db import load_tale_detail, load_tale_options, load_tale_rvds
+from utils.fasta_export import fasta_text, slugify_filename_part, tale_download_header
 from utils.page import init_page
 from utils.theme import blue_card_dark_mode_css
 
@@ -36,13 +37,6 @@ def taxonomy_label(row: pd.Series) -> str:
 
 def strand_label(value) -> str:
     return {1: "+", -1: "-"}.get(value, "?")
-
-
-def fasta_text(header: str, sequence: str) -> str:
-    if not sequence:
-        return f">{header}\n"
-    wrapped = [sequence[idx : idx + 80] for idx in range(0, len(sequence), 80)]
-    return f">{header}\n" + "\n".join(wrapped) + "\n"
 
 
 def ncbi_nuccore_url(accession: str) -> str:
@@ -258,14 +252,14 @@ st.markdown(
 rvds = load_tale_rvds(selected_tale_id)
 
 nav_col1, nav_col2 = st.columns(2)
-if nav_col1.button("Open in TALE Families", key=f"to_family_{int(row['tale_id'])}", use_container_width=True):
+if nav_col1.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_id'])}", use_container_width=True):
     selected_id = int(row["tale_id"])
     st.session_state["selected_tale_id"] = selected_id
     st.session_state["family_selected_tale_control"] = selected_id
     st.query_params["tale_id"] = str(selected_id)
     if hasattr(st, "switch_page"):
         st.switch_page("pages/03_TALE_Families.py")
-if nav_col2.button("Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
+if nav_col2.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
     selected_id = int(row["tale_id"])
     sample_id = row.get("sample_id")
     species_display = coalesce_text(row.get("species"))
@@ -462,20 +456,47 @@ with composition_cols[1]:
 
 st.subheader("Downloads")
 download_cols = st.columns(2)
-dna_header = f"tale_{int(row['tale_id'])}|{row['tale_name']}|dna"
-protein_header = f"tale_{int(row['tale_id'])}|{row['tale_name']}|protein"
+dna_header = tale_download_header(
+    family=family_name,
+    species=row.get("species"),
+    pathovar=row.get("pathovar"),
+    taxon_name=row.get("taxon_name"),
+    sample_name=sample_name,
+    legacy_sample_name=row.get("legacy_strain_name"),
+    tale_name=row.get("tale_name"),
+    accession=row.get("accession"),
+    start_pos=row.get("start_pos"),
+    end_pos=row.get("end_pos"),
+    strand=row.get("strand"),
+)
+protein_header = tale_download_header(
+    family=family_name,
+    species=row.get("species"),
+    pathovar=row.get("pathovar"),
+    taxon_name=row.get("taxon_name"),
+    sample_name=sample_name,
+    legacy_sample_name=row.get("legacy_strain_name"),
+    tale_name=row.get("tale_name"),
+    accession=row.get("accession"),
+    start_pos=row.get("start_pos"),
+    end_pos=row.get("end_pos"),
+    strand=row.get("strand"),
+)
+file_stub = slugify_filename_part(
+    f"{row.get('tale_name')}_{sample_name}_{row.get('accession')}"
+)
 download_cols[0].download_button(
-    "Download DNA FASTA",
+    "📥 Download DNA FASTA",
     data=fasta_text(dna_header, dna_seq),
-    file_name=f"tale_{int(row['tale_id'])}_dna.fasta",
+    file_name=f"{file_stub}_tale_dna_sequence.fasta",
     mime="text/plain",
     disabled=not bool(dna_seq),
     use_container_width=True,
 )
 download_cols[1].download_button(
-    "Download Protein FASTA",
+    "📥 Download Protein FASTA",
     data=fasta_text(protein_header, protein_seq),
-    file_name=f"tale_{int(row['tale_id'])}_protein.fasta",
+    file_name=f"{file_stub}_tale_protein_sequence.fasta",
     mime="text/plain",
     disabled=not bool(protein_seq),
     use_container_width=True,

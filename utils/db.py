@@ -307,6 +307,7 @@ def load_strain_tales(strain_id: int) -> pd.DataFrame:
         """
         SELECT t.id AS tale_id,
                t.legacy_name AS tale_name,
+               t.dna_seq,
                t.is_pseudo,
                t.is_new,
                t.start_pos,
@@ -318,10 +319,17 @@ def load_strain_tales(strain_id: int) -> pd.DataFrame:
                a.accession,
                a.version,
                a.accession_type,
-               a.replicon_type
+               a.replicon_type,
+               s.strain_name AS sample_name,
+               s.legacy_strain_name,
+               tx.raw_name AS taxon_name,
+               tx.species,
+               tx.pathovar
         FROM tale t
         LEFT JOIN assembly a ON a.id = t.assembly_id
         LEFT JOIN tale_family_member fm ON fm.tale_id = t.id
+        LEFT JOIN samples s ON s.id = a.sample_id
+        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
         WHERE a.sample_id = ?
         ORDER BY
             CASE WHEN t.start_pos IS NULL THEN 1 ELSE 0 END,
@@ -384,4 +392,33 @@ def load_tale_detail(tale_id: int) -> pd.DataFrame:
         WHERE t.id = ?
         """,
         params=[int(tale_id)],
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_family_download_rows(family_name: str) -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT t.id AS tale_id,
+               t.legacy_name AS tale_name,
+               t.dna_seq,
+               t.start_pos,
+               t.end_pos,
+               t.strand,
+               fm.family_id AS family,
+               a.accession,
+               s.strain_name,
+               s.legacy_strain_name,
+               tx.raw_name AS taxon_name,
+               tx.species,
+               tx.pathovar
+        FROM tale_family_member fm
+        JOIN tale t ON t.id = fm.tale_id
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        LEFT JOIN samples s ON s.id = a.sample_id
+        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
+        WHERE fm.family_id = ?
+        ORDER BY t.id
+        """,
+        params=[family_name],
     )

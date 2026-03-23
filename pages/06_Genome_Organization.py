@@ -4,6 +4,10 @@ import streamlit as st
 from urllib.parse import quote
 
 from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
+from utils.fasta_export import (
+    build_multi_fasta,
+    slugify_filename_part,
+)
 from utils.page import init_page
 from utils.taxonomy import abbreviate_taxon_labels, apply_taxon_fallback, build_legacy_taxon_map
 from utils.theme import SELECTED_ACCENT, blue_card_dark_mode_css
@@ -237,8 +241,8 @@ def sample_option_label(row: pd.Series) -> str:
 
     biosample_id = str(row["biosample_id"] or "").strip()
     if biosample_id and biosample_id.lower() != "nan":
-        return f"{int(row['id'])} | {strain_name} | {biosample_id}"
-    return f"{int(row['id'])} | {strain_name} | unknown biosample id"
+        return f"{strain_name} | {biosample_id}"
+    return f"{strain_name} | unknown biosample id"
 
 
 def map_country_from_geo_tag(value: str | None) -> str:
@@ -763,7 +767,7 @@ def render_selected_tale(selected_row: pd.Series) -> None:
         unsafe_allow_html=True,
     )
     if st.button(
-        "Open TALE Detail",
+        "🔎 Open TALE Detail",
         key=f"open_family_page_{int(selected_row['tale_id'])}",
         use_container_width=True,
     ):
@@ -853,22 +857,46 @@ def render_unplaced_table(unplaced_tales: pd.DataFrame) -> None:
 
 
 def render_selection_summary(
-    selected_species: str, selected_pathovar: str, selected_sample_row: pd.Series
+    selected_species: str,
+    selected_pathovar: str,
+    selected_sample_row: pd.Series,
+    tales: pd.DataFrame,
 ) -> None:
-    st.markdown(f"**Selected Species:** {selected_species}")
-    st.markdown(f"**Selected Pathovar:** {selected_pathovar}")
-    st.markdown(f"**Selected Sample / Strain:** {sample_option_label(selected_sample_row)}")
-    if st.button("Open In Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
-        target_country = map_country_from_geo_tag(selected_sample_row.get("geo_tag"))
-        target_taxon = sample_map_species_pathovar_label(
-            selected_species,
-            selected_pathovar,
+    sample_name = str(selected_sample_row.get("strain_name") or "").strip()
+    if not sample_name or sample_name.lower() == "nan":
+        sample_name = str(selected_sample_row.get("legacy_strain_name") or "").strip()
+    sample_name = sample_name or f"sample_{int(selected_sample_row['id'])}"
+
+    fasta_payload = build_multi_fasta(
+        tales,
+        sort_columns=["assembly_label", "start_pos", "end_pos", "tale_id"],
+    )
+    file_name = (
+        f"{slugify_filename_part(sample_name)}"
+        f"_strain_tales_as_genomic_fasta.fasta"
+    )
+    action_col1, action_col2, _ = st.columns([1.15, 1.5, 6.2], gap="small")
+    with action_col1:
+        if st.button("🌍 Open Strain in Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
+            target_country = map_country_from_geo_tag(selected_sample_row.get("geo_tag"))
+            target_taxon = sample_map_species_pathovar_label(
+                selected_species,
+                selected_pathovar,
+            )
+            st.session_state["sample_map_pending_country"] = target_country
+            st.session_state["sample_map_pending_taxon"] = target_taxon
+            st.session_state["sample_map_pending_sample_id"] = int(selected_sample_row["id"])
+            if hasattr(st, "switch_page"):
+                st.switch_page("pages/05_Sample_Map.py")
+    with action_col2:
+        st.download_button(
+            "📥 Download Strain TALEs as Genomic FASTA",
+            data=fasta_payload,
+            file_name=file_name,
+            mime="text/plain",
+            disabled=not bool(fasta_payload),
+            help="Downloads all TALE genomic DNA sequences for the selected strain.",
         )
-        st.session_state["sample_map_pending_country"] = target_country
-        st.session_state["sample_map_pending_taxon"] = target_taxon
-        st.session_state["sample_map_pending_sample_id"] = int(selected_sample_row["id"])
-        if hasattr(st, "switch_page"):
-            st.switch_page("pages/05_Sample_Map.py")
 
 
 def render_selected_tale_from_rows(rows: pd.DataFrame) -> None:
@@ -990,8 +1018,8 @@ if tales.empty:
 
 available_assemblies = tales["assembly_label"].drop_duplicates().tolist()
 selected_assemblies = initialize_assembly_filter(available_assemblies)
+render_selection_summary(selected_species, selected_pathovar, selected_sample_row, tales)
 compress_gaps = st.checkbox("Compress empty genome regions", value=True)
-render_selection_summary(selected_species, selected_pathovar, selected_sample_row)
 
 plot_df, collapsed_intervals, unplaced_tales = build_plot_data(
     tales,

@@ -85,7 +85,7 @@ def sample_option_label(row: pd.Series) -> str:
     strain_display = str(row.get("strain_display") or "Unknown").strip() or "Unknown"
     year = row.get("year")
     year_display = str(int(year)) if pd.notna(year) else "year unknown"
-    return f"{int(row['sample_id'])} | {strain_display} ({year_display})"
+    return f"{strain_display} ({year_display})"
 
 
 def extract_selected_species_pathovar(event_payload) -> str | None:
@@ -498,7 +498,7 @@ def render_sample_navigation_card(
             ),
         )
         if st.button(
-            "Open In Genome Organization",
+            "🧬 Open Sample in Genome Organization",
             key=f"sample_map_open_genome_{selected_country}",
             use_container_width=True,
         ):
