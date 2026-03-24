@@ -111,6 +111,13 @@ def extract_selected_species_pathovar(event_payload) -> str | None:
     return find_selected(event_payload.get("selection", {}))
 
 
+def to_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return int(cleaned) if cleaned.isdigit() else None
+
+
 @st.cache_data(show_spinner=False)
 def build_sample_map_base() -> pd.DataFrame:
     raw = load_sample_map_source().copy()
@@ -141,6 +148,42 @@ def build_taxonomy_labels(include_pathovar: bool) -> pd.DataFrame:
         tax_raw["species_pathovar"]
     )
     return tax_raw[["sample_id", "species_pathovar"]]
+
+
+@st.cache_data(show_spinner=False)
+def build_taxonomy_filter_rows() -> pd.DataFrame:
+    tax_raw = load_sample_taxonomy().copy()
+    legacy_map = build_legacy_taxon_map(
+        tax_raw,
+        include_pathovar=True,
+        legacy_col="legacy_strain_name",
+        sample_id_col="sample_id",
+    )
+    combined = apply_taxon_fallback(
+        tax_raw,
+        include_pathovar=True,
+        legacy_map=legacy_map,
+        id_col="sample_id",
+        legacy_col="legacy_strain_name",
+    ).fillna("Unknown")
+
+    split_values = combined.apply(split_species_pathovar)
+    tax_raw["species_display"] = split_values.str[0].fillna("Unknown")
+    tax_raw["pathovar_display"] = split_values.str[1].fillna("Unknown")
+    return tax_raw[["sample_id", "species_display", "pathovar_display"]]
+
+
+def split_species_pathovar(label: str) -> tuple[str, str]:
+    cleaned = str(label or "").strip()
+    if not cleaned or cleaned.lower() == "unknown":
+        return "Unknown", "Unknown"
+
+    parts = cleaned.split(maxsplit=2)
+    if len(parts) >= 3:
+        return f"{parts[0]} {parts[1]}", parts[2]
+    if len(parts) == 2:
+        return cleaned, "Unknown"
+    return cleaned, "Unknown"
 
 
 @st.cache_data(show_spinner=False)
@@ -215,8 +258,8 @@ def apply_pending_navigation(previous_page: str | None) -> None:
 
     st.session_state["selected_country"] = pending_country
     st.session_state["sample_map_prev_country"] = pending_country
-    st.session_state["sample_map_tax_filter"] = "All"
-    st.session_state.pop("sample_map_taxon", None)
+    st.session_state["sample_map_species_filter"] = "All"
+    st.session_state["sample_map_pathovar_filter"] = "All"
     st.session_state["sample_map_view_mode"] = "Static"
     st.session_state["sample_map_prev_view"] = "Static"
     if pending_taxon is not None:
@@ -227,12 +270,220 @@ def apply_pending_navigation(previous_page: str | None) -> None:
         st.session_state[f"sample_map_sample_id_{pending_country}"] = int(pending_sample_id)
 
 
+def sync_sample_map_url(sample_id: int | None) -> None:
+    st.query_params.clear()
+    if sample_id is not None:
+        st.query_params["sample_id"] = str(int(sample_id))
+        st.session_state["sample_map_last_query_sample_id"] = int(sample_id)
+
+
+def apply_query_sample_selection(raw: pd.DataFrame, selected_sample_id: int | None) -> None:
+    if selected_sample_id is None:
+        return
+    if st.session_state.get("sample_map_last_query_sample_id") == int(selected_sample_id):
+        return
+
+    query_match = raw[raw["sample_id"] == int(selected_sample_id)]
+    if query_match.empty:
+        return
+
+    query_country = query_match.iloc[0].get("country")
+    resolved_country = (
+        str(query_country)
+        if pd.notna(query_country) and str(query_country).strip()
+        else UNKNOWN_COUNTRY
+    )
+    st.session_state["selected_country"] = resolved_country
+    st.session_state["sample_map_prev_country"] = resolved_country
+    st.session_state[f"sample_map_sample_id_{resolved_country}"] = int(selected_sample_id)
+    st.session_state["sample_map_last_query_sample_id"] = int(selected_sample_id)
+
+
 def reset_country_scoped_state(country: str) -> None:
     prefix = f"sample_map_species_breakdown_{country}"
     st.session_state.pop(f"{prefix}_selected_taxon", None)
     st.session_state.pop(f"{prefix}_last_chart_taxon", None)
     st.session_state.pop(f"sample_map_taxon_dropdown_{country}", None)
     st.session_state.pop(f"sample_map_sample_id_{country}", None)
+
+
+def render_page_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 16px;
+            border: 1px solid #d9dfd2;
+            background:
+                radial-gradient(circle at top right, rgba(174, 196, 136, 0.35), transparent 34%),
+                linear-gradient(145deg, #f7f4ea 0%, #eef4e6 100%);
+        }
+        .sample-nav-card {
+            padding: 0 0 0.3rem 0;
+        }
+        .sample-nav-kicker {
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            color: #55624b;
+            margin-bottom: 0.35rem;
+        }
+        .sample-nav-title {
+            font-size: 1.2rem;
+            line-height: 1.1;
+            font-weight: 700;
+            color: #182018;
+            margin: 0 0 0.35rem 0;
+        }
+        .sample-nav-text {
+            color: #374235;
+            margin: 0 0 0.8rem 0;
+        }
+        @media (prefers-color-scheme: dark) {
+            .sample-nav-kicker {
+                color: #aac4d8;
+            }
+            .sample-nav-title {
+                color: #eef6fb;
+            }
+            .sample-nav-text {
+                color: #dceaf3;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def apply_taxonomy_filters(
+    raw: pd.DataFrame,
+    taxonomy_rows: pd.DataFrame,
+) -> pd.DataFrame:
+    if taxonomy_rows.empty:
+        st.info("No taxonomy metadata available; showing all samples.")
+        return raw
+
+    st.markdown("**Filter samples by taxonomy.**")
+    filtered = raw.copy()
+    species_options = ["All"] + sorted(
+        taxonomy_rows["species_display"].dropna().unique().tolist()
+    )
+    selected_species = st.selectbox(
+        "Species",
+        species_options,
+        key="sample_map_species_filter",
+    )
+
+    if selected_species == "All":
+        st.session_state["sample_map_pathovar_filter"] = "All"
+        return filtered
+
+    species_rows = taxonomy_rows[
+        taxonomy_rows["species_display"] == selected_species
+    ].copy()
+    filtered = filtered[filtered["sample_id"].isin(species_rows["sample_id"])]
+
+    pathovar_options = ["All"] + sorted(
+        species_rows["pathovar_display"].dropna().unique().tolist()
+    )
+    if st.session_state.get("sample_map_pathovar_filter") not in pathovar_options:
+        st.session_state["sample_map_pathovar_filter"] = "All"
+
+    selected_pathovar = st.selectbox(
+        "Pathovar",
+        pathovar_options,
+        key="sample_map_pathovar_filter",
+    )
+    if selected_pathovar == "All":
+        return filtered
+
+    allowed_ids = species_rows.loc[
+        species_rows["pathovar_display"] == selected_pathovar, "sample_id"
+    ]
+    return filtered[filtered["sample_id"].isin(allowed_ids)]
+
+
+def resolve_view_mode() -> str:
+    view_mode = st.radio(
+        "View mode",
+        ["Static", "Cumulative by year"],
+        horizontal=True,
+        key="sample_map_view_mode",
+    )
+    previous_view_mode = st.session_state.setdefault(
+        "sample_map_prev_view",
+        view_mode,
+    )
+    if previous_view_mode != view_mode:
+        st.session_state["selected_country"] = "All"
+        st.session_state["sample_map_prev_view"] = view_mode
+    return view_mode
+
+
+def resolve_cutoff_year(source: pd.DataFrame, view_mode: str) -> tuple[str, int | None]:
+    if view_mode != "Cumulative by year":
+        return view_mode, None
+
+    located_mask = source["country"].notna() & (source["country"] != "")
+    valid_years = source.loc[located_mask, "year"].dropna().astype(int)
+    if valid_years.empty:
+        st.info("No usable collection years found; showing static view instead.")
+        return "Static", None
+
+    year_options = sorted(valid_years.unique().tolist())
+    state_key = "sample_map_cutoff_year"
+    current_year = st.session_state.get(state_key, year_options[-1])
+    if current_year not in year_options:
+        current_year = year_options[-1]
+
+    if len(year_options) == 1:
+        cutoff_year = int(year_options[0])
+        st.caption(f"Show samples up to year: {cutoff_year}")
+    else:
+        cutoff_year = st.select_slider(
+            "Show samples up to year",
+            options=year_options,
+            value=current_year,
+        )
+    st.session_state[state_key] = int(cutoff_year)
+    return view_mode, int(cutoff_year)
+
+
+def render_selection_panels(
+    selected_rows: pd.DataFrame,
+    selected_country: str,
+) -> None:
+    if selected_rows.empty:
+        st.info("No samples for the selected country and filters.")
+        return
+
+    sample_rows = build_sample_selection_rows(selected_rows)
+    sp_counts = (
+        sample_rows["species_pathovar"]
+        .value_counts()
+        .rename_axis("species_pathovar")
+        .reset_index(name="count")
+        .sort_values("count", ascending=False)
+    )
+
+    if selected_country == "All":
+        country_counts = (
+            selected_rows.groupby("country")
+            .size()
+            .reset_index(name="count")
+            .sort_values("count", ascending=False)
+        )
+        with st.expander("Sample Count By Country", expanded=False):
+            st.dataframe(country_counts, use_container_width=True, height=220)
+
+    st.subheader("Species/Pathovar Breakdown")
+    selected_species_pathovar = render_species_pathovar_chart(sp_counts, selected_country)
+    render_sample_navigation_card(
+        sample_rows=sample_rows,
+        selected_country=selected_country,
+        selected_species_pathovar=selected_species_pathovar,
+    )
 
 
 def render_map(
@@ -497,6 +748,7 @@ def render_sample_navigation_card(
                 visible_samples.loc[visible_samples["sample_id"] == sample_id].iloc[0]
             ),
         )
+        sync_sample_map_url(int(selected_sample_id))
         if st.button(
             "🧬 Open Sample in Genome Organization",
             key=f"sample_map_open_genome_{selected_country}",
@@ -518,108 +770,20 @@ apply_pending_navigation(previous_page)
 
 st.title("Sample Locations")
 st.caption("Country-level map; dot size indicates sample count.")
-st.markdown(
-    """
-    <style>
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 16px;
-        border: 1px solid #d9dfd2;
-        background:
-            radial-gradient(circle at top right, rgba(174, 196, 136, 0.35), transparent 34%),
-            linear-gradient(145deg, #f7f4ea 0%, #eef4e6 100%);
-    }
-    .sample-nav-card {
-        padding: 0 0 0.3rem 0;
-    }
-    .sample-nav-kicker {
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        color: #55624b;
-        margin-bottom: 0.35rem;
-    }
-    .sample-nav-title {
-        font-size: 1.2rem;
-        line-height: 1.1;
-        font-weight: 700;
-        color: #182018;
-        margin: 0 0 0.35rem 0;
-    }
-    .sample-nav-text {
-        color: #374235;
-        margin: 0 0 0.8rem 0;
-    }
-    @media (prefers-color-scheme: dark) {
-        .sample-nav-kicker {
-            color: #aac4d8;
-        }
-        .sample-nav-title {
-            color: #eef6fb;
-        }
-        .sample-nav-text {
-            color: #dceaf3;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+render_page_styles()
 
 raw = build_sample_map_base()
 if raw.empty:
     st.warning("No sample data available.")
     st.stop()
 
-tax_filter = st.radio(
-    "Filter by taxonomy",
-    ["All", "Species", "Species + Pathovar"],
-    horizontal=True,
-    key="sample_map_tax_filter",
-)
-source = raw.copy()
-if tax_filter != "All":
-    tax_raw = build_taxonomy_labels(tax_filter == "Species + Pathovar")
-    if tax_raw.empty:
-        st.info("No taxonomy metadata available; showing all samples.")
-    else:
-        taxon_options = ["All"] + sorted(
-            tax_raw["species_pathovar"].dropna().unique().tolist()
-        )
-        selected_taxon = st.selectbox(tax_filter, taxon_options, key="sample_map_taxon")
-        if selected_taxon != "All":
-            allowed_ids = set(
-                tax_raw.loc[
-                    tax_raw["species_pathovar"] == selected_taxon, "sample_id"
-                ].tolist()
-            )
-            source = source[source["sample_id"].isin(allowed_ids)]
+selected_sample_from_query = to_int(st.query_params.get("sample_id"))
+apply_query_sample_selection(raw, selected_sample_from_query)
 
-view_mode = st.radio(
-    "View mode",
-    ["Static", "Cumulative by year"],
-    horizontal=True,
-    key="sample_map_view_mode",
-)
-if "sample_map_prev_view" not in st.session_state:
-    st.session_state["sample_map_prev_view"] = view_mode
-elif st.session_state["sample_map_prev_view"] != view_mode:
-    st.session_state["selected_country"] = "All"
-    st.session_state["sample_map_prev_view"] = view_mode
-
-cutoff_year = None
-located_mask = source["country"].notna() & (source["country"] != "")
-if view_mode == "Cumulative by year":
-    valid_years = source.loc[located_mask, "year"].dropna().astype(int)
-    if valid_years.empty:
-        st.info("No usable collection years found; showing static view instead.")
-        view_mode = "Static"
-    else:
-        cutoff_year = st.slider(
-            "Show samples up to year",
-            min_value=int(valid_years.min()),
-            max_value=int(valid_years.max()),
-            value=int(valid_years.max()),
-        )
+taxonomy_rows = build_taxonomy_filter_rows()
+source = apply_taxonomy_filters(raw, taxonomy_rows)
+view_mode = resolve_view_mode()
+view_mode, cutoff_year = resolve_cutoff_year(source, view_mode)
 
 missing_country, located = filter_source(source, view_mode, cutoff_year)
 counts = build_country_counts(located)
@@ -630,36 +794,7 @@ selected_country, selected_rows = handle_country_selection(
     missing_country=missing_country,
     mappable=mappable,
 )
-
-if selected_rows.empty:
-    st.info("No samples for the selected country and filters.")
-else:
-    sample_rows = build_sample_selection_rows(selected_rows)
-    sp_counts = (
-        sample_rows["species_pathovar"]
-        .value_counts()
-        .rename_axis("species_pathovar")
-        .reset_index(name="count")
-        .sort_values("count", ascending=False)
-    )
-
-    if selected_country == "All":
-        country_counts = (
-            selected_rows.groupby("country")
-            .size()
-            .reset_index(name="count")
-            .sort_values("count", ascending=False)
-        )
-        with st.expander("Sample Count By Country", expanded=False):
-            st.dataframe(country_counts, use_container_width=True, height=220)
-
-    st.subheader("Species/Pathovar Breakdown")
-    selected_species_pathovar = render_species_pathovar_chart(sp_counts, selected_country)
-    render_sample_navigation_card(
-        sample_rows=sample_rows,
-        selected_country=selected_country,
-        selected_species_pathovar=selected_species_pathovar,
-    )
+render_selection_panels(selected_rows, selected_country)
 
 with st.expander("Samples Without Location", expanded=False):
     if missing_country.empty:
