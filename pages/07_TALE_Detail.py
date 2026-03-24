@@ -277,6 +277,9 @@ if nav_col1.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row[
     st.session_state.pop("genome_org_assemblies", None)
     st.session_state["genome_org_query_select_focus_assembly"] = False
     st.session_state["genome_org_previous_scope"] = None
+    st.query_params.clear()
+    if pd.notna(sample_id):
+        st.query_params["sample_id"] = str(int(sample_id))
     st.query_params["tale_id"] = str(selected_id)
     if hasattr(st, "switch_page"):
         st.switch_page("pages/06_Genome_Organization.py")

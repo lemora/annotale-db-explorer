@@ -59,8 +59,6 @@ st.markdown(
 )
 
 DEFAULT_SAMPLE_ID = 4
-DEFAULT_GAP_THRESHOLD = 100_000
-RETAINED_GAP_SIZE = 25_000
 BOX_HEIGHT = 18
 ESTIMATED_CHART_WIDTH_PX = 1600.0
 MIN_BOX_SVG_WIDTH = 14
@@ -343,15 +341,36 @@ def rerun_page() -> None:
         st.experimental_rerun()
 
 
+def sync_genome_org_url(sample_id: int | None, tale_id: int | None) -> None:
+    st.query_params.clear()
+    if sample_id is not None:
+        st.query_params["sample_id"] = str(int(sample_id))
+        st.session_state["genome_org_last_seen_query_sample_id"] = int(sample_id)
+    else:
+        st.session_state["genome_org_last_seen_query_sample_id"] = None
+    if tale_id is not None:
+        st.query_params["tale_id"] = str(int(tale_id))
+        st.session_state["genome_org_last_seen_query_tale_id"] = int(tale_id)
+    else:
+        st.session_state["genome_org_last_seen_query_tale_id"] = None
+
+
+def clear_selected_tale() -> None:
+    st.session_state["genome_org_selected_tale_id"] = None
+    st.session_state["genome_org_query_select_focus_assembly"] = True
+
+
 def apply_query_tale_selection(
     scope_samples: pd.DataFrame, selected_tale_id: int | None
 ) -> None:
     if selected_tale_id is None:
+        st.session_state["genome_org_last_seen_query_tale_id"] = None
         return
-    if st.session_state.get("genome_org_last_query_tale_id") == int(selected_tale_id):
+    if st.session_state.get("genome_org_last_seen_query_tale_id") == int(selected_tale_id):
         return
 
     query_tale_detail = load_tale_detail(int(selected_tale_id))
+    st.session_state["genome_org_last_seen_query_tale_id"] = int(selected_tale_id)
     if query_tale_detail.empty:
         return
 
@@ -375,8 +394,29 @@ def apply_query_tale_selection(
             query_row.get("accession"),
             query_row.get("replicon_type"),
         )
-    st.session_state["genome_org_last_query_tale_id"] = int(selected_tale_id)
     st.session_state["genome_org_query_select_focus_assembly"] = True
+    st.session_state["genome_org_skip_clear_on_sample_change"] = True
+
+
+def apply_query_sample_selection(
+    scope_samples: pd.DataFrame, selected_sample_id: int | None
+) -> None:
+    if selected_sample_id is None:
+        st.session_state["genome_org_last_seen_query_sample_id"] = None
+        return
+    if st.session_state.get("genome_org_last_seen_query_sample_id") == int(selected_sample_id):
+        return
+
+    sample_match = scope_samples[scope_samples["id"] == int(selected_sample_id)]
+    st.session_state["genome_org_last_seen_query_sample_id"] = int(selected_sample_id)
+    if sample_match.empty:
+        return
+
+    sample_row = sample_match.iloc[0]
+    st.session_state["genome_org_species"] = sample_row["species_display"]
+    st.session_state["genome_org_pathovar"] = sample_row["pathovar_display"]
+    st.session_state["genome_org_sample_id"] = int(selected_sample_id)
+    st.session_state["genome_org_skip_clear_on_sample_change"] = True
 
 
 def apply_pending_navigation_selection(scope_samples: pd.DataFrame) -> None:
@@ -396,9 +436,18 @@ def apply_pending_navigation_selection(scope_samples: pd.DataFrame) -> None:
     st.session_state["genome_org_sample_id"] = int(pending_sample_id)
     if pending_tale_id is not None:
         st.session_state["genome_org_selected_tale_id"] = int(pending_tale_id)
-        st.session_state["genome_org_last_query_tale_id"] = None
     if pending_assembly:
         st.session_state["genome_org_target_assembly"] = pending_assembly
+    st.session_state["genome_org_skip_clear_on_sample_change"] = True
+
+
+def apply_incoming_selection(scope_samples: pd.DataFrame) -> int | None:
+    apply_pending_navigation_selection(scope_samples)
+    selected_sample_from_query = to_int(st.query_params.get("sample_id"))
+    apply_query_sample_selection(scope_samples, selected_sample_from_query)
+    selected_tale_from_query = to_int(st.query_params.get("tale_id"))
+    apply_query_tale_selection(scope_samples, selected_tale_from_query)
+    return selected_sample_from_query
 
 
 def select_scope_samples(scoped_samples: pd.DataFrame) -> tuple[str, str, pd.DataFrame]:
@@ -448,9 +497,34 @@ def select_sample(scope_samples: pd.DataFrame) -> tuple[int, pd.Series]:
     return int(selected_sample_id), selected_sample_row
 
 
-def compress_empty_regions(
-    tales: pd.DataFrame, min_gap_size: int, retained_gap_size: int
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def clear_tale_selection_if_scope_changed(
+    previous_sample_id: int | None,
+    selected_sample_id: int,
+    selected_sample_from_query: int | None,
+) -> None:
+    skip_clear_on_sample_change = st.session_state.pop(
+        "genome_org_skip_clear_on_sample_change",
+        False,
+    )
+    if skip_clear_on_sample_change:
+        return
+
+    sample_changed_from_previous = (
+        previous_sample_id is not None
+        and int(previous_sample_id) != int(selected_sample_id)
+    )
+    sample_changed_from_query = (
+        selected_sample_from_query is not None
+        and int(selected_sample_id) != int(selected_sample_from_query)
+    )
+    if not sample_changed_from_previous and not sample_changed_from_query:
+        return
+
+    clear_selected_tale()
+    st.session_state.pop("genome_org_target_assembly", None)
+
+
+def compress_empty_regions(tales: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     plot_df = tales.copy()
     plot_df["start_plot"] = plot_df["start_pos"]
     plot_df["end_plot"] = plot_df["end_pos"]
@@ -458,6 +532,11 @@ def compress_empty_regions(
     collapsed_rows: list[dict] = []
     for assembly_label in plot_df["assembly_label"].drop_duplicates().tolist():
         assembly_rows = plot_df[plot_df["assembly_label"] == assembly_label]
+        assembly_tale_spans = (
+            assembly_rows["end_pos"].astype(float) - assembly_rows["start_pos"].astype(float)
+        )
+        largest_tale_size = max(float(assembly_tale_spans.max()), 0.0)
+        assembly_gap_threshold = 5.0 * largest_tale_size
         intervals = list(
             assembly_rows[["start_pos", "end_pos"]]
             .dropna()
@@ -469,9 +548,13 @@ def compress_empty_regions(
             gap_start = float(previous.end_pos)
             gap_end = float(current.start_pos)
             gap_size = gap_end - gap_start
-            if gap_size <= min_gap_size:
+            if gap_size <= assembly_gap_threshold:
                 continue
 
+            previous_tale_size = float(previous.end_pos) - float(previous.start_pos)
+            current_tale_size = float(current.end_pos) - float(current.start_pos)
+            retained_gap_size = 2.0 * max(previous_tale_size, current_tale_size, 0.0)
+            retained_gap_size = min(retained_gap_size, gap_size)
             removed_from_axis = gap_size - retained_gap_size
             offset_before = offset
             offset += removed_from_axis
@@ -605,8 +688,6 @@ def build_plot_data(
 
     plot_df, collapsed_intervals = compress_empty_regions(
         plot_tales,
-        min_gap_size=DEFAULT_GAP_THRESHOLD,
-        retained_gap_size=RETAINED_GAP_SIZE,
     )
     return plot_df, collapsed_intervals, unplaced_tales
 
@@ -629,8 +710,6 @@ def build_collapsed_gap_marker_rows(assembly_gaps: pd.DataFrame) -> pd.DataFrame
 
 def render_assembly_chart(
     assembly_tales: pd.DataFrame,
-    all_families: list[str],
-    colors_by_family: dict[str, str],
     compress_gaps: bool,
     collapsed_intervals: pd.DataFrame,
     selected_tale_id: int | None,
@@ -929,7 +1008,6 @@ def render_selected_tale_from_rows(rows: pd.DataFrame) -> None:
     if matching_rows.empty:
         return
 
-    st.query_params["tale_id"] = str(int(selected_tale_id))
     render_selected_tale(matching_rows.iloc[0])
 
 
@@ -967,8 +1045,6 @@ def render_plot_section(
     for assembly_label in plot_df["assembly_label"].drop_duplicates().tolist():
         event_tale_id = render_assembly_chart(
             plot_df[plot_df["assembly_label"] == assembly_label].copy(),
-            all_families=families,
-            colors_by_family=colors_by_family,
             compress_gaps=compress_gaps,
             collapsed_intervals=collapsed_intervals,
             selected_tale_id=st.session_state.get("genome_org_selected_tale_id"),
@@ -980,9 +1056,7 @@ def render_plot_section(
         st.session_state.get("genome_org_selected_tale_id") != clicked_tale_id
     ):
         st.session_state["genome_org_selected_tale_id"] = clicked_tale_id
-        st.session_state["genome_org_last_query_tale_id"] = clicked_tale_id
         st.session_state["genome_org_query_select_focus_assembly"] = False
-        st.query_params["tale_id"] = str(clicked_tale_id)
         rerun_page()
 
     st.markdown(
@@ -1003,12 +1077,11 @@ def render_plot_section(
             table_height = min(320, max(120, 35 * (len(collapsed_intervals) + 1)))
             st.dataframe(
                 collapsed_intervals[
-                    ["assembly_label", "gap_start", "removed_from_axis", "gap_size"]
+                    ["assembly_label", "gap_start", "removed_from_axis"]
                 ].rename(
                     columns={
                         "gap_start": "gap starts after position",
                         "removed_from_axis": "removed from plot",
-                        "gap_size": "adjacent TALE distance",
                     }
                 ),
                 use_container_width=True,
@@ -1024,16 +1097,17 @@ if scope_samples.empty:
     st.warning("No TALE-linked sample metadata available.")
     st.stop()
 
-apply_pending_navigation_selection(scope_samples)
-selected_from_query = to_int(st.query_params.get("tale_id"))
-apply_query_tale_selection(scope_samples, selected_from_query)
-
+selected_sample_from_query = apply_incoming_selection(scope_samples)
+previous_sample_id = st.session_state.get("genome_org_current_sample_id")
 selected_species, selected_pathovar, sample_scope = select_scope_samples(scope_samples)
-current_scope = f"{selected_species} | {selected_pathovar}"
-st.session_state["genome_org_previous_scope"] = current_scope
-
 selected_sample_id, selected_sample_row = select_sample(sample_scope)
 initialize_selected_tale_state()
+clear_tale_selection_if_scope_changed(
+    previous_sample_id=previous_sample_id,
+    selected_sample_id=selected_sample_id,
+    selected_sample_from_query=selected_sample_from_query,
+)
+st.session_state["genome_org_current_sample_id"] = int(selected_sample_id)
 
 tales = prepare_tales(int(selected_sample_id))
 if tales.empty:
@@ -1071,3 +1145,8 @@ else:
 
 if not unplaced_tales.empty:
     render_unplaced_table(unplaced_tales)
+
+sync_genome_org_url(
+    selected_sample_id,
+    st.session_state.get("genome_org_selected_tale_id"),
+)
