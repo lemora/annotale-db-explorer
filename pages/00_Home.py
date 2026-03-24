@@ -58,11 +58,11 @@ with p1:
 with p2:
     st.markdown(
         """
-        **TALE Families**  
-        Navigate family trees and inspect selected TALE details.
-
         **Genome Organization**  
         View TALE positions across assemblies and strands for a selected strain.
+
+        **TALE Families**  
+        Navigate family trees and inspect selected TALE details.
 
         **TALE Detail**  
         Inspect one TALE, download sequences, and follow record-level links.

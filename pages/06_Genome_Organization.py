@@ -477,6 +477,7 @@ def compress_empty_regions(
             offset += removed_from_axis
             gap_start_plot = gap_start - offset_before
             gap_end_plot = gap_end - offset
+            gap_marker_plot = gap_start_plot + (retained_gap_size / 2.0)
             collapsed_rows.append(
                 {
                     "assembly_label": assembly_label,
@@ -488,7 +489,7 @@ def compress_empty_regions(
                     "offset_after": int(offset),
                     "gap_start_plot": gap_start_plot,
                     "gap_end_plot": gap_end_plot,
-                    "gap_mid_plot": (gap_start_plot + gap_end_plot) / 2.0,
+                    "gap_marker_plot": gap_marker_plot,
                 }
             )
 
@@ -510,17 +511,10 @@ def compressed_axis_label_expr(assembly_gaps: pd.DataFrame) -> str:
     expr = "datum.value"
     for gap in sorted_gaps.itertuples(index=False):
         gap_start_plot = float(gap.gap_start_plot)
-        gap_end_plot = float(gap.gap_end_plot)
-        gap_start = float(gap.gap_start)
-        gap_size = float(gap.gap_size)
+        gap_marker_plot = float(gap.gap_marker_plot)
         offset_after = float(gap.offset_after)
-        inside_gap_expr = (
-            f"({gap_start} + ((datum.value - {gap_start_plot}) * {gap_size} / "
-            f"{RETAINED_GAP_SIZE}))"
-        )
         expr = (
-            f"(datum.value < {gap_start_plot} ? {expr} : "
-            f"datum.value <= {gap_end_plot} ? {inside_gap_expr} : "
+            f"(datum.value < {gap_marker_plot} ? {expr} : "
             f"(datum.value + {offset_after}))"
         )
 
@@ -624,6 +618,15 @@ def family_color_map(families: list[str]) -> dict[str, str]:
     }
 
 
+def build_collapsed_gap_marker_rows(assembly_gaps: pd.DataFrame) -> pd.DataFrame:
+    if assembly_gaps.empty:
+        return pd.DataFrame()
+
+    return assembly_gaps[
+        ["gap_marker_plot", "gap_start", "gap_end", "gap_size", "removed_from_axis"]
+    ].rename(columns={"gap_marker_plot": "marker_x"}).copy()
+
+
 def render_assembly_chart(
     assembly_tales: pd.DataFrame,
     all_families: list[str],
@@ -717,6 +720,24 @@ def render_assembly_chart(
         )
         .add_params(tale_select)
     )
+    if compress_gaps and not assembly_gaps.empty:
+        gap_markers = build_collapsed_gap_marker_rows(assembly_gaps)
+        gap_chart = (
+            alt.Chart(gap_markers)
+            .mark_rule(color="#6b7280", strokeDash=[7, 5], strokeWidth=1.6, opacity=0.95)
+            .encode(
+                x=alt.X("marker_x:Q", scale=alt.Scale(domain=assembly_domain)),
+                tooltip=[
+                    alt.Tooltip("marker_x:Q", title="Axis break on plot axis", format=",.0f"),
+                    alt.Tooltip("gap_start:Q", title="Original gap start", format=",.0f"),
+                    alt.Tooltip("gap_end:Q", title="Original gap end", format=",.0f"),
+                    alt.Tooltip("gap_size:Q", title="Original gap size", format=",.0f"),
+                    alt.Tooltip("removed_from_axis:Q", title="Removed from axis", format=",.0f"),
+                ],
+            )
+        )
+        chart = gap_chart + chart
+
     chart_spec = chart.properties(height=chart_height).to_dict()
     try:
         event = st.vega_lite_chart(
@@ -983,12 +1004,12 @@ def render_plot_section(
             table_height = min(320, max(120, 35 * (len(collapsed_intervals) + 1)))
             st.dataframe(
                 collapsed_intervals[
-                    ["assembly_label", "gap_start", "gap_end", "gap_size", "removed_from_axis"]
+                    ["assembly_label", "gap_start", "removed_from_axis", "gap_size"]
                 ].rename(
                     columns={
-                        "gap_start": "start",
-                        "gap_end": "end",
-                        "gap_size": "span",
+                        "gap_start": "gap starts after position",
+                        "removed_from_axis": "removed from plot",
+                        "gap_size": "adjacent TALE distance",
                     }
                 ),
                 use_container_width=True,
@@ -1031,7 +1052,9 @@ plot_df, collapsed_intervals, unplaced_tales = build_plot_data(
     compress_gaps=compress_gaps,
 )
 if compress_gaps and not collapsed_intervals.empty:
-    st.caption("Dashed lines mark collapsed genome intervals with no TALEs.")
+    st.caption(
+        "A dashed line marks the axis break inside a compressed TALE-free gap; a small retained space is kept on both sides of the break."
+    )
 selected_tale_rows = build_selected_tale_rows(tales)
 if plot_df.empty:
     if unplaced_tales.empty:
