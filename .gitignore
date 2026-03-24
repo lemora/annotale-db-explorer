@@ -20,3 +20,5 @@ ENV/
 
 # Data
 *.db
+analytics/
+.env

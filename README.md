@@ -31,12 +31,17 @@ To stop:
 docker compose down
 ```
 
+## Analytics
+
+Self-hosted page-visit logging is available and persists in `./analytics/analytics.sqlite3` when enabled via Docker Compose. Operational details, configuration, and safe-copy instructions are documented in [docs/analytics.md](/home/anbaq/Dev/Repos-Own/annotale-db-explorer/docs/analytics.md).
+
 ## Project Structure
 
 - `app.py`: Streamlit entrypoint and page navigation
 - `.streamlit/config.toml`: Streamlit client configuration
 - `pages/`: page rendering and page-local logic
 - `utils/db.py`: centralized SQL/database query layer
+- `utils/analytics.py`: self-hosted analytics logging
 - `utils/`: shared helpers for page setup, taxonomy handling, tree layout, and theme constants
 - `data/annotale.db`: SQLite data source
 

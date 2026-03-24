@@ -990,7 +990,6 @@ def render_plot_section(
             "<p style='color: var(--text-color-secondary, #6b7280); font-size: 0.875rem;'>"
             "Each box is one TALE, and the in-box label matches the plot TALE number. "
             "Separate lanes show strand within each assembly/replicon. "
-            "Pseudo TALEs are semi-transparent.<br>"
             "Click a box to select it."
             "</p>"
         ),
