@@ -284,7 +284,8 @@ if nav_col2.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_
     selected_id = int(row["tale_id"])
     st.session_state["selected_tale_id"] = selected_id
     st.session_state["family_selected_tale_control"] = selected_id
-    st.query_params["tale_id"] = str(selected_id)
+    st.query_params.clear()
+    st.query_params["family"] = str(family_name)
     if hasattr(st, "switch_page"):
         st.switch_page("pages/03_TALE_Families.py")
 

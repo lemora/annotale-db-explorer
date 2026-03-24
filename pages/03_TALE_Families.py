@@ -38,6 +38,19 @@ SELECTED_RVD_HEIGHT = 110
 SP_CHART_HEIGHT = 150
 
 
+def rerun_page() -> None:
+    try:
+        st.rerun()
+    except AttributeError:
+        st.experimental_rerun()
+
+
+def chart_key_for_family(family_name: str, selected_tale_id: int | None) -> str:
+    family_part = "".join(ch if ch.isalnum() else "_" for ch in family_name)
+    tale_part = "none" if selected_tale_id is None else str(int(selected_tale_id))
+    return f"family_tree_{family_part}_{tale_part}"
+
+
 def to_int(value: str) -> int | None:
     if value is None:
         return None
@@ -233,19 +246,14 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
       </table>
     </div>
     <script>
-      const rows = document.querySelectorAll('#tale-table tbody tr');
-      rows.forEach(r => r.addEventListener('click', () => {{
-        const id = r.getAttribute('data-id');
-        const url = new URL(window.parent.location.href);
-        url.searchParams.set('tale_id', id);
-        window.parent.location.href = url.toString();
-      }}));
       const selectedId = "{selected_id or ''}";
       if (selectedId) {{
         setTimeout(() => {{
-          const el = document.querySelector(`#tale-table tbody tr[data-id='${{selectedId}}']`);
-          if (el) {{
-            el.scrollIntoView({{block: "center"}});
+          const wrapper = document.getElementById('tale-table-wrapper');
+          const row = document.querySelector(`#tale-table tbody tr[data-id='${{selectedId}}']`);
+          if (wrapper && row) {{
+            const targetTop = row.offsetTop - wrapper.clientHeight / 2 + row.clientHeight / 2;
+            wrapper.scrollTop = Math.max(0, targetTop);
           }}
         }}, 50);
       }}
@@ -294,7 +302,7 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
         background: var(--tale-table-selected-bg);
         color: var(--tale-table-selected-text);
       }}
-      #tale-table tr.row:hover {{ background: var(--tale-table-hover-bg); cursor: pointer; }}
+      #tale-table tr.row:hover {{ background: var(--tale-table-hover-bg); }}
       #tale-table thead th {{
         position: sticky;
         top: 0;
@@ -306,18 +314,199 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
     components.html(table_html, height=320)
 
 
-def set_selected_tale_id(tale_id: int | None) -> None:
-    if tale_id is None:
-        st.session_state["selected_tale_id"] = None
-        st.session_state["family_last_query_tale_id"] = None
-        if "tale_id" in st.query_params:
-            del st.query_params["tale_id"]
-        return
-    selected = int(tale_id)
-    st.session_state["selected_tale_id"] = selected
-    st.session_state["family_last_query_tale_id"] = selected
-    st.query_params["tale_id"] = str(selected)
+def sync_family_url(family_name: str | None, tale_id: int | None) -> None:
+    st.query_params.clear()
+    if family_name is not None:
+        st.query_params["family"] = family_name
+    if tale_id is not None:
+        st.query_params["tale_id"] = str(int(tale_id))
 
+
+def queue_selection(family_name: str | None, tale_id: int | None) -> None:
+    st.session_state["family_pending_family_control"] = family_name
+    st.session_state["family_pending_tale_control"] = tale_id
+
+
+def normalize_selection(
+    requested_family_name: str | None,
+    requested_tale_id: int | None,
+    fallback_family_name: str,
+) -> tuple[str, int | None]:
+    if requested_tale_id in tale_to_family:
+        resolved_family_name = tale_to_family[int(requested_tale_id)]
+        return resolved_family_name, int(requested_tale_id)
+
+    if requested_family_name in family_options:
+        resolved_family_name = str(requested_family_name)
+    else:
+        resolved_family_name = fallback_family_name
+
+    family_tales = family_to_tale_ids.get(resolved_family_name, [])
+    if requested_tale_id in family_tales:
+        return resolved_family_name, int(requested_tale_id)
+    if family_tales:
+        return resolved_family_name, int(family_tales[0])
+    return resolved_family_name, None
+
+
+def apply_selection(family_name: str, tale_id: int | None) -> None:
+    st.session_state["family_idx"] = family_options.index(family_name)
+    st.session_state["selected_tale_id"] = tale_id
+
+
+def resolve_selection_state(
+    family_options: list[str],
+    all_tale_options: list[int],
+) -> tuple[str, int | None]:
+    if "family_idx" not in st.session_state:
+        st.session_state["family_idx"] = 0
+    st.session_state["family_idx"] = max(
+        0, min(st.session_state["family_idx"], len(family_options) - 1)
+    )
+
+    fallback_family_name = family_options[st.session_state["family_idx"]]
+    pending_family_name = st.session_state.pop("family_pending_family_control", None)
+    pending_tale_id = st.session_state.pop("family_pending_tale_control", None)
+    if pending_tale_id is not None:
+        pending_tale_id = int(pending_tale_id)
+
+    requested_family_name = (
+        pending_family_name
+        if pending_family_name is not None
+        else str(st.query_params.get("family") or "").strip() or None
+    )
+    requested_tale_id = (
+        pending_tale_id
+        if pending_tale_id is not None
+        else to_int(st.query_params.get("tale_id"))
+    )
+    if requested_tale_id is None:
+        current_selected_id = st.session_state.get("selected_tale_id")
+        if current_selected_id in all_tale_options:
+            requested_tale_id = int(current_selected_id)
+
+    family_name, tale_id = normalize_selection(
+        requested_family_name,
+        requested_tale_id,
+        fallback_family_name=fallback_family_name,
+    )
+    apply_selection(family_name, tale_id)
+    if (
+        str(st.query_params.get("family") or "").strip() != family_name
+        or to_int(st.query_params.get("tale_id")) != tale_id
+    ):
+        sync_family_url(family_name, tale_id)
+    return family_name, tale_id
+
+
+def queue_first_tale_for_family(family_name: str) -> None:
+    family_tales = family_to_tale_ids.get(family_name, [])
+    target_tale_id = family_tales[0] if family_tales else None
+    queue_selection(family_name, target_tale_id)
+    sync_family_url(family_name, target_tale_id)
+
+
+def render_selection_controls(
+    current_family_name: str,
+    selected_id: int | None,
+    all_tale_options: list[int],
+    tale_name_by_id: dict[int, str],
+    family_options: list[str],
+    family_sizes: dict[str, int],
+) -> str:
+    if all_tale_options:
+        selected_tale_index = (
+            all_tale_options.index(selected_id) if selected_id in all_tale_options else 0
+        )
+        selected_tale = st.selectbox(
+            "Select a TALE:",
+            all_tale_options,
+            index=selected_tale_index,
+            format_func=lambda tale_id: f"{tale_id}: {tale_name_by_id.get(tale_id, '')}",
+        )
+        if selected_tale != selected_id:
+            target_family_name = tale_to_family.get(int(selected_tale), current_family_name)
+            queue_selection(target_family_name, int(selected_tale))
+            sync_family_url(target_family_name, int(selected_tale))
+            rerun_page()
+        selected_detail_tale_id = int(selected_tale)
+        if st.button("🔎 Open Selected TALE Detail", use_container_width=True):
+            st.session_state["tale_detail_id"] = selected_detail_tale_id
+            st.session_state["tale_detail_last_query_id"] = selected_detail_tale_id
+            st.query_params["tale_id"] = str(selected_detail_tale_id)
+            if hasattr(st, "switch_page"):
+                st.switch_page("pages/07_TALE_Detail.py")
+
+    st.markdown("---")
+
+    prev_col, next_col = st.columns(2)
+    current_idx = family_options.index(current_family_name)
+    if prev_col.button("← Previous Family"):
+        new_idx = (current_idx - 1) % len(family_options)
+        queue_first_tale_for_family(family_options[new_idx])
+        rerun_page()
+    if next_col.button("Next Family →"):
+        new_idx = (current_idx + 1) % len(family_options)
+        queue_first_tale_for_family(family_options[new_idx])
+        rerun_page()
+
+    selected_family = st.selectbox(
+        "Family",
+        family_options,
+        index=current_idx,
+        format_func=lambda name: f"{name} ({int(family_sizes.get(name, 0))})",
+    )
+    if current_family_name != selected_family:
+        queue_first_tale_for_family(selected_family)
+        rerun_page()
+    return selected_family
+
+
+def render_species_pathovar_panel(family_name: str) -> None:
+    st.subheader("TALEs by Species + Pathovar")
+    sp_raw = load_family_species_pathovar(family_name)
+    if sp_raw.empty:
+        st.info("No species/pathovar data for this family.")
+        return
+
+    legacy_map = build_legacy_taxon_map(
+        sp_raw,
+        include_pathovar=True,
+        legacy_col="legacy_strain_name",
+        sample_id_col="sample_id",
+    )
+    species_pathovar = apply_taxon_fallback(
+        sp_raw,
+        include_pathovar=True,
+        legacy_map=legacy_map,
+        id_col="sample_id",
+        legacy_col="legacy_strain_name",
+    )
+    sp_counts = (
+        species_pathovar.dropna()
+        .value_counts()
+        .rename_axis("species_pathovar")
+        .reset_index(name="count")
+        .sort_values("count", ascending=False)
+    )
+    sp_counts["species_pathovar"] = abbreviate_taxon_labels(
+        sp_counts["species_pathovar"]
+    )
+    sp_chart = (
+        alt.Chart(sp_counts)
+        .mark_bar()
+        .encode(
+            y=alt.Y(
+                "species_pathovar:N",
+                sort="-x",
+                title="Species + Pathovar",
+                axis=alt.Axis(labelLimit=2000, labelOverlap=False),
+            ),
+            x=alt.X("count:Q", title="TALE count", axis=alt.Axis(format="d")),
+            tooltip=["species_pathovar:N", "count:Q"],
+        )
+    )
+    st.altair_chart(sp_chart.properties(height=SP_CHART_HEIGHT), use_container_width=True)
 
 families = load_families()
 families = families[families["tree_newick"].fillna("").str.strip() != ""]
@@ -358,109 +547,22 @@ else:
     all_tale_options = all_tale_rows["id"].tolist()
     tale_name_by_id = dict(zip(all_tale_rows["id"], all_tale_rows["name"].fillna("")))
 
-if "family_idx" not in st.session_state:
-    st.session_state["family_idx"] = 0
-st.session_state["family_idx"] = max(
-    0, min(st.session_state["family_idx"], len(family_options) - 1)
+current_family_name, selected_id = resolve_selection_state(
+    family_options,
+    all_tale_options,
 )
-
-selected_from_query = st.query_params.get("tale_id")
-last_query_tale_id = st.session_state.get("family_last_query_tale_id")
-if selected_from_query:
-    try:
-        selected_query_id = int(selected_from_query)
-        if (
-            selected_query_id in tale_to_family
-            and selected_query_id != last_query_tale_id
-        ):
-            set_selected_tale_id(selected_query_id)
-            st.session_state["family_idx"] = family_options.index(tale_to_family[selected_query_id])
-            st.session_state["family_selected_tale_control"] = selected_query_id
-    except ValueError:
-        pass
-
-selected_id = st.session_state.get("selected_tale_id")
-if selected_id is not None:
-    try:
-        selected_id = int(selected_id)
-    except ValueError:
-        selected_id = None
-if selected_id in tale_to_family:
-    st.session_state["family_idx"] = family_options.index(tale_to_family[selected_id])
-else:
-    selected_id = None
-    set_selected_tale_id(None)
 
 left, right = st.columns([2, 3])
 
 with left:
-    current_family_name = family_options[st.session_state["family_idx"]]
-    if all_tale_options:
-        current_family_tales = family_to_tale_ids.get(current_family_name, [])
-        if (
-            selected_id in all_tale_options
-            and st.session_state.get("family_selected_tale_control") != selected_id
-        ):
-            st.session_state["family_selected_tale_control"] = selected_id
-        control_selected_tale_id = st.session_state.get(
-            "family_selected_tale_control", selected_id
-        )
-        if control_selected_tale_id not in all_tale_options:
-            if current_family_tales:
-                control_selected_tale_id = current_family_tales[0]
-            else:
-                control_selected_tale_id = all_tale_options[0]
-            set_selected_tale_id(control_selected_tale_id)
-            selected_id = control_selected_tale_id
-        if st.session_state.get("family_selected_tale_control") != control_selected_tale_id:
-            st.session_state["family_selected_tale_control"] = control_selected_tale_id
-        selected_tale = st.selectbox(
-            "Select a TALE:",
-            all_tale_options,
-            key="family_selected_tale_control",
-            format_func=lambda tale_id: f"{tale_id}: {tale_name_by_id.get(tale_id, '')}",
-        )
-        if selected_tale != control_selected_tale_id:
-            set_selected_tale_id(selected_tale)
-            selected_family_for_tale = tale_to_family.get(selected_tale, current_family_name)
-            if selected_family_for_tale in family_options:
-                st.session_state["family_idx"] = family_options.index(selected_family_for_tale)
-            st.rerun()
-        selected_detail_tale_id = int(st.session_state.get("family_selected_tale_control"))
-        if st.button("🔎 Open Selected TALE Detail", use_container_width=True):
-            st.session_state["tale_detail_id"] = selected_detail_tale_id
-            st.session_state["tale_detail_last_query_id"] = selected_detail_tale_id
-            st.query_params["tale_id"] = str(selected_detail_tale_id)
-            if hasattr(st, "switch_page"):
-                st.switch_page("pages/07_TALE_Detail.py")
-    st.markdown("---")
-
-    def select_first_tale_for_family(family_name: str) -> None:
-        family_tales = family_to_tale_ids.get(family_name, [])
-        set_selected_tale_id(family_tales[0] if family_tales else None)
-
-    prev_col, next_col = st.columns(2)
-    current_idx = st.session_state["family_idx"]
-    if prev_col.button("← Previous Family"):
-        new_idx = (current_idx - 1) % len(family_options)
-        st.session_state["family_idx"] = new_idx
-        select_first_tale_for_family(family_options[new_idx])
-        st.rerun()
-    if next_col.button("Next Family →"):
-        new_idx = (current_idx + 1) % len(family_options)
-        st.session_state["family_idx"] = new_idx
-        select_first_tale_for_family(family_options[new_idx])
-        st.rerun()
-    selected_family = st.selectbox(
-        "Family",
+    render_selection_controls(
+        current_family_name,
+        selected_id,
+        all_tale_options,
+        tale_name_by_id,
         family_options,
-        index=st.session_state["family_idx"],
-        format_func=lambda name: f"{name} ({int(family_sizes.get(name, 0))})",
+        family_sizes,
     )
-    if family_options[st.session_state["family_idx"]] != selected_family:
-        st.session_state["family_idx"] = family_options.index(selected_family)
-        select_first_tale_for_family(selected_family)
-        st.rerun()
     family_name = family_options[st.session_state["family_idx"]]
     family_download_rows = load_family_download_rows(family_name)
     family_fasta_payload = build_multi_fasta(family_download_rows, sort_columns=["tale_id"])
@@ -476,15 +578,6 @@ with left:
 
 row = families[families["name"] == family_name].iloc[0]
 family_tales = family_to_tale_ids.get(family_name, [])
-selected_id = st.session_state.get("selected_tale_id")
-if selected_id is not None:
-    try:
-        selected_id = int(selected_id)
-    except ValueError:
-        selected_id = None
-if selected_id not in family_tales:
-    selected_id = family_tales[0] if family_tales else None
-    set_selected_tale_id(selected_id)
 
 with left:
     col1, col2 = st.columns(2)
@@ -514,7 +607,9 @@ else:
 
 if selected_id is not None and selected_id not in nodes_df["tale_id"].dropna().tolist():
     selected_id = family_tales[0] if family_tales else None
-    set_selected_tale_id(selected_id)
+    queue_selection(family_name, selected_id)
+    sync_family_url(family_name, selected_id)
+    rerun_page()
 
 edge_points = build_edge_points(nodes_df, edges_df, selected_id)
 chart_height = max(TREE_MIN_HEIGHT, int(nodes_df["x"].max() * 18))
@@ -579,67 +674,33 @@ with right:
     )
     try:
         event = st.vega_lite_chart(
-            spec, use_container_width=True, theme="streamlit", on_select="rerun"
+            spec,
+            use_container_width=True,
+            theme="streamlit",
+            on_select="rerun",
+            key=chart_key_for_family(family_name, selected_id),
         )
     except TypeError:
-        event = st.vega_lite_chart(spec, use_container_width=True, theme="streamlit")
+        event = st.vega_lite_chart(
+            spec,
+            use_container_width=True,
+            theme="streamlit",
+            key=chart_key_for_family(family_name, selected_id),
+        )
 
 selected_event_id = extract_selected_id(event)
-if selected_event_id is not None:
-    set_selected_tale_id(int(selected_event_id))
-    try:
-        st.rerun()
-    except AttributeError:
-        st.experimental_rerun()
+if selected_event_id is not None and int(selected_event_id) != selected_id:
+    target_family_name = tale_to_family.get(int(selected_event_id), family_name)
+    queue_selection(target_family_name, int(selected_event_id))
+    sync_family_url(target_family_name, int(selected_event_id))
+    rerun_page()
 
 with left:
     st.subheader("Family TALEs")
     tale_rows = load_family_tale_rows(family_name)
     render_tale_table(tale_rows, selected_id)
 
-    st.subheader("TALEs by Species + Pathovar")
-    sp_raw = load_family_species_pathovar(family_name)
-    if sp_raw.empty:
-        st.info("No species/pathovar data for this family.")
-    else:
-        legacy_map = build_legacy_taxon_map(
-            sp_raw,
-            include_pathovar=True,
-            legacy_col="legacy_strain_name",
-            sample_id_col="sample_id",
-        )
-        species_pathovar = apply_taxon_fallback(
-            sp_raw,
-            include_pathovar=True,
-            legacy_map=legacy_map,
-            id_col="sample_id",
-            legacy_col="legacy_strain_name",
-        )
-        sp_counts = (
-            species_pathovar.dropna()
-            .value_counts()
-            .rename_axis("species_pathovar")
-            .reset_index(name="count")
-            .sort_values("count", ascending=False)
-        )
-        sp_counts["species_pathovar"] = abbreviate_taxon_labels(
-            sp_counts["species_pathovar"]
-        )
-        sp_chart = (
-            alt.Chart(sp_counts)
-            .mark_bar()
-            .encode(
-                y=alt.Y(
-                    "species_pathovar:N",
-                    sort="-x",
-                    title="Species + Pathovar",
-                    axis=alt.Axis(labelLimit=2000, labelOverlap=False),
-                ),
-                x=alt.X("count:Q", title="TALE count", axis=alt.Axis(format="d")),
-                tooltip=["species_pathovar:N", "count:Q"],
-            )
-        )
-        st.altair_chart(sp_chart.properties(height=SP_CHART_HEIGHT), use_container_width=True)
+    render_species_pathovar_panel(family_name)
 
     st.subheader("RVD Counts by Repeat Position")
     selected_is_pseudo = False
