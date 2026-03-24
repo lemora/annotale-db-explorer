@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_plotly_events import plotly_events
 
+from utils.analytics import track_page_visit
 from utils.db import load_sample_map_source, load_sample_taxonomy
 from utils.page import init_page
 from utils.taxonomy import (
@@ -275,6 +276,7 @@ def sync_sample_map_url(sample_id: int | None) -> None:
     if sample_id is not None:
         st.query_params["sample_id"] = str(int(sample_id))
         st.session_state["sample_map_last_query_sample_id"] = int(sample_id)
+    track_page_visit()
 
 
 def apply_query_sample_selection(raw: pd.DataFrame, selected_sample_id: int | None) -> None:

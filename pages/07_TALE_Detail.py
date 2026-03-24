@@ -2,6 +2,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from utils.analytics import track_page_visit
 from utils.db import load_tale_detail, load_tale_options, load_tale_rvds
 from utils.fasta_export import fasta_text, slugify_filename_part, tale_download_header
 from utils.page import init_page
@@ -201,6 +202,7 @@ selected_tale_id = st.selectbox(
 )
 selected_tale_id = int(selected_tale_id)
 st.query_params["tale_id"] = str(selected_tale_id)
+track_page_visit()
 st.session_state["tale_detail_last_query_id"] = selected_tale_id
 
 detail = load_tale_detail(selected_tale_id)

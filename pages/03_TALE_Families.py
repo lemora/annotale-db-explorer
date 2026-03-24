@@ -17,6 +17,7 @@ from utils.fasta_export import (
     build_multi_fasta,
     slugify_filename_part,
 )
+from utils.analytics import track_page_visit
 from utils.page import init_page
 from utils.theme import PSEUDO_TALE_GREY, SELECTED_ACCENT
 from utils.taxonomy import (
@@ -320,6 +321,7 @@ def sync_family_url(family_name: str | None, tale_id: int | None) -> None:
         st.query_params["family"] = family_name
     if tale_id is not None:
         st.query_params["tale_id"] = str(int(tale_id))
+    track_page_visit()
 
 
 def queue_selection(family_name: str | None, tale_id: int | None) -> None:

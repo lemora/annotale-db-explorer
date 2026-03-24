@@ -69,4 +69,4 @@ def init_page(page_title: str, active_page: str, require_db: bool = True) -> Non
             use_container_width=True,
         )
     st.session_state["active_page"] = active_page
-    track_page_visit(active_page)
+    track_page_visit()

@@ -4,7 +4,7 @@ This app can log page visits to a local SQLite database for later private analys
 
 ## Defaults
 
-- enabled in Docker Compose
+- disabled by default
 - hashed IP storage by default
 - 30 day retention by default
 - persistent storage in `./analytics/analytics.sqlite3`
@@ -57,9 +57,15 @@ Logs are stored in `./analytics/analytics.sqlite3` on the host. Rebuilding or re
 - first seen and last seen timestamps
 - visited page names
 - page visit timestamps
-- current URL
+- current URL, including query parameters
 - user agent
 - locale and timezone if available from Streamlit
+
+## URL Tracking
+
+- a page-view row is written when the page changes
+- a page-view row is also written when the URL changes on the same page
+- this includes tracked query params such as `sample_id`, `tale_id`, and `family`
 
 ## Quick Inspection
 

@@ -4,6 +4,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode, urlsplit
 
 import streamlit as st
 
@@ -67,6 +68,31 @@ def header_value(headers, key: str) -> str | None:
     return str(value)
 
 
+def optional_text(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def analytics_url_parts(ctx) -> tuple[str, str]:
+    base_url = str(getattr(ctx, "url", "") or "")
+    params = {}
+    try:
+        for key, value in st.query_params.items():
+            if isinstance(value, list):
+                params[key] = [str(item) for item in value]
+            else:
+                params[key] = str(value)
+    except Exception:  # noqa: BLE001
+        parts = urlsplit(base_url)
+        return parts.path or "", parts.query or ""
+
+    page_path = urlsplit(base_url).path or ""
+    query_params = urlencode(params, doseq=True) if params else ""
+    return page_path, query_params
+
+
 def analytics_connection() -> sqlite3.Connection:
     ANALYTICS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(ANALYTICS_DB_PATH, timeout=30)
@@ -89,8 +115,8 @@ def analytics_connection() -> sqlite3.Connection:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ts TEXT NOT NULL,
             session_id TEXT NOT NULL,
-            page TEXT NOT NULL,
-            url TEXT,
+            page_path TEXT NOT NULL,
+            query_params TEXT,
             FOREIGN KEY (session_id) REFERENCES analytics_sessions(session_id)
         )
         """
@@ -111,8 +137,8 @@ def analytics_connection() -> sqlite3.Connection:
     )
     conn.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_analytics_page_views_page_ts
-        ON analytics_page_views(page, ts)
+        CREATE INDEX IF NOT EXISTS idx_analytics_page_views_path_ts
+        ON analytics_page_views(page_path, ts)
         """
     )
     return conn
@@ -147,7 +173,7 @@ def run_retention_cleanup(conn: sqlite3.Connection) -> None:
     )
 
 
-def track_page_visit(page_name: str) -> None:
+def track_page_visit() -> None:
     if not analytics_enabled():
         return
 
@@ -157,9 +183,10 @@ def track_page_visit(page_name: str) -> None:
         now_iso = utc_now_iso()
         ip_value = ip_value_for_storage(getattr(ctx, "ip_address", None))
         user_agent = header_value(getattr(ctx, "headers", {}), "user-agent")
-        locale = getattr(ctx, "locale", None)
-        timezone_name = getattr(ctx, "timezone", None)
-        url = str(getattr(ctx, "url", ""))
+        locale = optional_text(getattr(ctx, "locale", None))
+        timezone_name = optional_text(getattr(ctx, "timezone", None))
+        page_path, query_params = analytics_url_parts(ctx)
+        page_view_key = (page_path, query_params)
 
         with analytics_connection() as conn:
             conn.execute(
@@ -192,16 +219,18 @@ def track_page_visit(page_name: str) -> None:
                 ),
             )
 
-            last_page = st.session_state.get("analytics_last_logged_page")
-            if last_page != page_name:
+            last_page_view_key = st.session_state.get("analytics_last_logged_page_view_key")
+            if last_page_view_key != page_view_key:
                 conn.execute(
                     """
-                    INSERT INTO analytics_page_views (ts, session_id, page, url)
+                    INSERT INTO analytics_page_views (
+                        ts, session_id, page_path, query_params
+                    )
                     VALUES (?, ?, ?, ?)
                     """,
-                    (now_iso, session_id, page_name, url),
+                    (now_iso, session_id, page_path, query_params),
                 )
-                st.session_state["analytics_last_logged_page"] = page_name
+                st.session_state["analytics_last_logged_page_view_key"] = page_view_key
 
             run_retention_cleanup(conn)
     except Exception:  # noqa: BLE001

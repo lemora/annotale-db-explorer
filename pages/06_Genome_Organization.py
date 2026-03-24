@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 from urllib.parse import quote
 
+from utils.analytics import track_page_visit
 from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
 from utils.fasta_export import (
     build_multi_fasta,
@@ -18,6 +19,9 @@ st.caption("TALE positions by replicon and strand, colored by family.")
 st.markdown(
     """
     <style>
+    div.stButton > button {
+        white-space: nowrap;
+    }
     .selected-tale-card {
         padding: 1rem 1.1rem;
         border: 1px solid #dfe6d8;
@@ -353,6 +357,7 @@ def sync_genome_org_url(sample_id: int | None, tale_id: int | None) -> None:
         st.session_state["genome_org_last_seen_query_tale_id"] = int(tale_id)
     else:
         st.session_state["genome_org_last_seen_query_tale_id"] = None
+    track_page_visit()
 
 
 def clear_selected_tale() -> None:
@@ -975,7 +980,7 @@ def render_selection_summary(
         f"{slugify_filename_part(sample_name)}"
         f"_strain_tales_as_genomic_fasta.fasta"
     )
-    action_col1, action_col2, _ = st.columns([1.15, 1.5, 6.2], gap="small")
+    action_col1, action_col2, _ = st.columns([1.5, 2.2, 5.3], gap="small")
     with action_col1:
         if st.button("📍 Open Strain in Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
             target_country = map_country_from_geo_tag(selected_sample_row.get("geo_tag"))

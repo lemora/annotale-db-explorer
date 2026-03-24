@@ -5,7 +5,7 @@ services:
     ports:
       - "8501:8501"
     environment:
-      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-true}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
       ANALYTICS_DB_PATH: ${ANALYTICS_DB_PATH:-/app/analytics/analytics.sqlite3}
       ANALYTICS_IP_MODE: ${ANALYTICS_IP_MODE:-hash}
       ANALYTICS_RETENTION_DAYS: ${ANALYTICS_RETENTION_DAYS:-30}
