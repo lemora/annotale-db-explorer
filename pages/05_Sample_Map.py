@@ -767,7 +767,7 @@ def render_sample_navigation_card(
 
 
 previous_page = st.session_state.get("active_page")
-init_page("Sample Map", "Sample Map")
+init_page("Sample Map", "Sample Map", track_analytics=False)
 apply_pending_navigation(previous_page)
 
 st.title("Sample Locations")

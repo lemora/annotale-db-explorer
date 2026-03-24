@@ -47,7 +47,12 @@ def db_unavailable_reason() -> str | None:
     return None
 
 
-def init_page(page_title: str, active_page: str, require_db: bool = True) -> None:
+def init_page(
+    page_title: str,
+    active_page: str,
+    require_db: bool = True,
+    track_analytics: bool = True,
+) -> None:
     browser_title = APP_TITLE if page_title == "Home" else f"{APP_TITLE}: {page_title}"
     st.set_page_config(
         page_title=browser_title,
@@ -69,4 +74,5 @@ def init_page(page_title: str, active_page: str, require_db: bool = True) -> Non
             use_container_width=True,
         )
     st.session_state["active_page"] = active_page
-    track_page_visit()
+    if track_analytics:
+        track_page_visit()

@@ -8,7 +8,7 @@ from utils.fasta_export import fasta_text, slugify_filename_part, tale_download_
 from utils.page import init_page
 from utils.theme import blue_card_dark_mode_css
 
-init_page("TALE Detail", "TALE Detail")
+init_page("TALE Detail", "TALE Detail", track_analytics=False)
 st.title("TALE Detail")
 
 

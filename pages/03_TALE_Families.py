@@ -27,7 +27,7 @@ from utils.taxonomy import (
 )
 from utils.tree import layout_tree, try_parse_newick
 
-init_page("TALE Families", "TALE Families")
+init_page("TALE Families", "TALE Families", track_analytics=False)
 st.title("TALE Families")
 
 INNER_SPACING = 38.0

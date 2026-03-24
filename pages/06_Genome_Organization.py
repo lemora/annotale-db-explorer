@@ -13,7 +13,7 @@ from utils.page import init_page
 from utils.taxonomy import abbreviate_taxon_labels, apply_taxon_fallback, build_legacy_taxon_map
 from utils.theme import SELECTED_ACCENT, blue_card_dark_mode_css
 
-init_page("Genome Organization", "Genome Organization")
+init_page("Genome Organization", "Genome Organization", track_analytics=False)
 st.title("TALE Genomic Organization")
 st.caption("TALE positions by replicon and strand, colored by family.")
 st.markdown(
