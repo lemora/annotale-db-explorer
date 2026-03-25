@@ -33,7 +33,7 @@ docker compose down
 
 ## Analytics
 
-Self-hosted page-visit logging is available and persists in `./analytics/analytics.sqlite3` when enabled via Docker Compose. Operational details, configuration, and safe-copy instructions are documented in [docs/analytics.md](/home/anbaq/Dev/Repos-Own/annotale-db-explorer/docs/analytics.md).
+Self-hosted page-visit logging is available and persists in `./analytics/analytics.sqlite3` when enabled via Docker Compose. Details are documented in [docs/analytics.md](docs/analytics.md).
 
 ## Project Structure
 
