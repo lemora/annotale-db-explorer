@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import os
 import sqlite3
 import uuid
@@ -19,6 +20,13 @@ ANALYTICS_HASH_SALT = os.getenv("ANALYTICS_HASH_SALT", "change-me")
 ANALYTICS_RETENTION_DAYS_RAW = os.getenv("ANALYTICS_RETENTION_DAYS", "30").strip().lower()
 ANALYTICS_IP_MODE = os.getenv("ANALYTICS_IP_MODE", "hash").strip().lower()
 DEFAULT_RETENTION_DAYS = 30
+FORWARDED_IP_HEADER_CANDIDATES = (
+    "cf-connecting-ip",
+    "true-client-ip",
+    "x-real-ip",
+    "x-forwarded-for",
+    "forwarded",
+)
 
 
 def analytics_enabled() -> bool:
@@ -66,6 +74,74 @@ def header_value(headers, key: str) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def normalized_ip_address(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    cleaned = str(value).strip()
+    if not cleaned:
+        return None
+
+    # RFC 7239 may wrap IPv6 values in brackets and include a port.
+    if cleaned.startswith("[") and "]" in cleaned:
+        cleaned = cleaned[1 : cleaned.index("]")]
+
+    try:
+        return str(ipaddress.ip_address(cleaned))
+    except ValueError:
+        return None
+
+
+def parse_forwarded_header(value: str | None) -> list[str]:
+    if not value:
+        return []
+
+    addresses: list[str] = []
+    for item in value.split(","):
+        for part in item.split(";"):
+            key, _, raw_value = part.partition("=")
+            if key.strip().lower() != "for":
+                continue
+            candidate = raw_value.strip().strip('"')
+            if candidate.lower() == "unknown":
+                continue
+            normalized = normalized_ip_address(candidate)
+            if normalized is not None:
+                addresses.append(normalized)
+    return addresses
+
+
+def parse_forwarded_for_header(value: str | None) -> list[str]:
+    if not value:
+        return []
+
+    addresses: list[str] = []
+    for item in value.split(","):
+        normalized = normalized_ip_address(item)
+        if normalized is not None:
+            addresses.append(normalized)
+    return addresses
+
+
+def client_ip_address(ctx) -> str | None:
+    headers = getattr(ctx, "headers", {})
+
+    for header_name in FORWARDED_IP_HEADER_CANDIDATES:
+        raw_value = header_value(headers, header_name)
+        if header_name == "forwarded":
+            parsed_values = parse_forwarded_header(raw_value)
+        elif header_name == "x-forwarded-for":
+            parsed_values = parse_forwarded_for_header(raw_value)
+        else:
+            parsed_values = [normalized_ip_address(raw_value)] if raw_value else []
+
+        for parsed_value in parsed_values:
+            if parsed_value is not None:
+                return parsed_value
+
+    return normalized_ip_address(getattr(ctx, "ip_address", None))
 
 
 def optional_text(value) -> str | None:
@@ -181,7 +257,7 @@ def track_page_visit() -> None:
         session_id = get_session_id()
         ctx = st.context
         now_iso = utc_now_iso()
-        ip_value = ip_value_for_storage(getattr(ctx, "ip_address", None))
+        ip_value = ip_value_for_storage(client_ip_address(ctx))
         user_agent = header_value(getattr(ctx, "headers", {}), "user-agent")
         locale = optional_text(getattr(ctx, "locale", None))
         timezone_name = optional_text(getattr(ctx, "timezone", None))

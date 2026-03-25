@@ -45,6 +45,13 @@ Logs are stored in `./analytics/analytics.sqlite3` on the host. Rebuilding or re
 - `raw`: stores the full IP address
 - `off`: stores no IP-derived value
 
+## Reverse Proxies
+
+If the app runs behind nginx, Traefik, Caddy, Cloudflare, or another reverse proxy, the proxy must
+forward the original client IP. The app prefers common forwarded-IP headers such as
+`CF-Connecting-IP`, `True-Client-IP`, `X-Real-IP`, `X-Forwarded-For`, and `Forwarded`, then falls
+back to Streamlit's direct socket IP.
+
 `ANALYTICS_RETENTION_DAYS` options:
 
 - `30`: default; delete analytics rows older than 30 days
