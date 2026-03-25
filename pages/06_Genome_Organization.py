@@ -735,6 +735,8 @@ def render_assembly_chart(
     chart_key = "genome_org_chart_" + "".join(
         ch if ch.isalnum() else "_" for ch in assembly_label
     )
+    selected_part = "none" if selected_tale_id is None else str(int(selected_tale_id))
+    chart_key = f"{chart_key}_{selected_part}"
     assembly_gaps = pd.DataFrame()
     if compress_gaps and not collapsed_intervals.empty:
         assembly_gaps = collapsed_intervals[
