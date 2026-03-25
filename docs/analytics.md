@@ -65,8 +65,7 @@ back to Streamlit's direct socket IP.
 - visited page names
 - page visit timestamps
 - current URL, including query parameters
-- user agent
-- locale and timezone if available from Streamlit
+- hashed or raw IP-derived value depending on `ANALYTICS_IP_MODE`
 
 ## URL Tracking
 

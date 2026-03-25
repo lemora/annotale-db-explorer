@@ -144,13 +144,6 @@ def client_ip_address(ctx) -> str | None:
     return normalized_ip_address(getattr(ctx, "ip_address", None))
 
 
-def optional_text(value) -> str | None:
-    if value is None:
-        return None
-    text = str(value)
-    return text if text else None
-
-
 def analytics_url_parts(ctx) -> tuple[str, str]:
     base_url = str(getattr(ctx, "url", "") or "")
     params = {}
@@ -178,10 +171,7 @@ def analytics_connection() -> sqlite3.Connection:
             session_id TEXT PRIMARY KEY,
             first_seen TEXT NOT NULL,
             last_seen TEXT NOT NULL,
-            ip_value TEXT,
-            user_agent TEXT,
-            locale TEXT,
-            timezone TEXT
+            ip_value TEXT
         )
         """
     )
@@ -258,9 +248,6 @@ def track_page_visit() -> None:
         ctx = st.context
         now_iso = utc_now_iso()
         ip_value = ip_value_for_storage(client_ip_address(ctx))
-        user_agent = header_value(getattr(ctx, "headers", {}), "user-agent")
-        locale = optional_text(getattr(ctx, "locale", None))
-        timezone_name = optional_text(getattr(ctx, "timezone", None))
         page_path, query_params = analytics_url_parts(ctx)
         page_view_key = (page_path, query_params)
 
@@ -271,27 +258,18 @@ def track_page_visit() -> None:
                     session_id,
                     first_seen,
                     last_seen,
-                    ip_value,
-                    user_agent,
-                    locale,
-                    timezone
+                    ip_value
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
                     last_seen = excluded.last_seen,
-                    ip_value = COALESCE(excluded.ip_value, analytics_sessions.ip_value),
-                    user_agent = COALESCE(excluded.user_agent, analytics_sessions.user_agent),
-                    locale = COALESCE(excluded.locale, analytics_sessions.locale),
-                    timezone = COALESCE(excluded.timezone, analytics_sessions.timezone)
+                    ip_value = COALESCE(excluded.ip_value, analytics_sessions.ip_value)
                 """,
                 (
                     session_id,
                     now_iso,
                     now_iso,
                     ip_value,
-                    user_agent,
-                    locale,
-                    timezone_name,
                 ),
             )
 

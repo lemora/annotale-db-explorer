@@ -4,13 +4,12 @@ from utils.db import load_families, load_strains, load_tales
 from utils.page import init_page
 
 init_page("Home", "Home", require_db=False)
+st.image("img/AnnoTALE_transp.png", width=160)
 st.title("AnnoTALE DB Explorer")
 st.caption(
     "Interactive explorer for the "
     "[AnnoTALE](https://github.com/jstacs/annotale) SQLite database."
 )
-
-st.image("img/AnnoTALE_transp.png", width=220)
 st.markdown(
     """
     Use the sidebar to move through database overview, TALE distributions,
