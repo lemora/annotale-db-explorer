@@ -658,15 +658,24 @@ def initialize_selected_tale_state() -> None:
         st.session_state["genome_org_selected_tale_id"] = None
 
 
-def initialize_assembly_filter(available_assemblies: list[str]) -> list[str]:
+def initialize_assembly_filter(
+    selected_sample_id: int, available_assemblies: list[str]
+) -> list[str]:
     target_assembly = st.session_state.pop("genome_org_target_assembly", None)
     current_assemblies = st.session_state.get("genome_org_assemblies")
-    if not current_assemblies or not set(current_assemblies).issubset(
+    assembly_sample_id = st.session_state.get("genome_org_assembly_sample_id")
+    sample_changed = assembly_sample_id != int(selected_sample_id)
+    if (
+        sample_changed
+        or not current_assemblies
+        or not set(current_assemblies).issubset(
         set(available_assemblies)
+    )
     ):
         st.session_state["genome_org_assemblies"] = available_assemblies
-    if target_assembly in available_assemblies:
+    elif target_assembly in available_assemblies:
         st.session_state["genome_org_assemblies"] = [target_assembly]
+    st.session_state["genome_org_assembly_sample_id"] = int(selected_sample_id)
 
     return st.multiselect(
         "Assemblies / replicons",
@@ -1120,7 +1129,7 @@ if tales.empty:
     st.stop()
 
 available_assemblies = tales["assembly_label"].drop_duplicates().tolist()
-selected_assemblies = initialize_assembly_filter(available_assemblies)
+selected_assemblies = initialize_assembly_filter(selected_sample_id, available_assemblies)
 render_selection_summary(selected_species, selected_pathovar, selected_sample_row, tales)
 compress_gaps = st.checkbox("Compress empty genome regions", value=True)
 
