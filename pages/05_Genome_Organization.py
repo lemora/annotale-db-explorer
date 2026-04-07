@@ -892,7 +892,7 @@ def render_selected_tale(selected_row: pd.Series) -> None:
         st.session_state["tale_detail_last_query_id"] = selected_id
         st.query_params["tale_id"] = str(selected_id)
         if hasattr(st, "switch_page"):
-            st.switch_page("pages/07_TALE_Detail.py")
+            st.switch_page("pages/06_TALE_Detail.py")
 
 
 def render_label_table(plot_df: pd.DataFrame) -> None:
@@ -1003,7 +1003,7 @@ def render_selection_summary(
             st.session_state["sample_map_pending_taxon"] = target_taxon
             st.session_state["sample_map_pending_sample_id"] = int(selected_sample_row["id"])
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/05_Sample_Map.py")
+                st.switch_page("pages/04_Sample_Map.py")
     with action_col2:
         st.download_button(
             "📥 Download Strain TALEs as Genomic FASTA",

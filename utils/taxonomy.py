@@ -6,6 +6,20 @@ def normalize_taxon_text(series: pd.Series) -> pd.Series:
     return normalized.replace("", pd.NA)
 
 
+def normalized_species_text(series: pd.Series) -> pd.Series:
+    return series.fillna("").astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+
+
+def normalized_pathovar_text(series: pd.Series) -> pd.Series:
+    return (
+        series.fillna("")
+        .astype(str)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+        .str.replace(r"^(pv\.|pathovar)\s+", "", regex=True, case=False)
+    )
+
+
 def legacy_code(series: pd.Series) -> pd.Series:
     cleaned = series.fillna("").str.strip()
     code = cleaned.where(cleaned == "", cleaned.str.split().str[0])
@@ -98,3 +112,32 @@ def apply_taxon_fallback(
         result.loc[missing_taxon] = codes.loc[missing_taxon].map(legacy_map)
     result.loc[has_id] = result.loc[has_id].fillna("Unknown")
     return result
+
+
+def filter_incomplete_taxa(
+    df: pd.DataFrame,
+    entity_level: str,
+    include_incomplete_taxa: bool,
+    species_col: str = "species",
+    pathovar_col: str = "pathovar",
+) -> pd.DataFrame:
+    if include_incomplete_taxa:
+        return df
+    if entity_level not in {"Species", "Species + Pathovar"}:
+        return df
+
+    filtered = df.copy()
+    species = normalized_species_text(filtered[species_col])
+    valid_species = (species != "") & ~species.str.contains(
+        r"(?:^|\s)sp\.?$",
+        case=False,
+        regex=True,
+    )
+    filtered = filtered.loc[valid_species].copy()
+
+    if entity_level == "Species + Pathovar":
+        pathovar = normalized_pathovar_text(filtered[pathovar_col])
+        valid_pathovar = (pathovar != "") & ~pathovar.str.fullmatch(r"unknown", case=False)
+        filtered = filtered.loc[valid_pathovar].copy()
+
+    return filtered

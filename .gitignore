@@ -22,3 +22,8 @@ ENV/
 *.db
 analytics/
 .env
+
+# IDE
+.idea
+
+TODO.md

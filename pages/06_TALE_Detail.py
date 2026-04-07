@@ -284,7 +284,7 @@ if nav_col1.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row[
         st.query_params["sample_id"] = str(int(sample_id))
     st.query_params["tale_id"] = str(selected_id)
     if hasattr(st, "switch_page"):
-        st.switch_page("pages/06_Genome_Organization.py")
+        st.switch_page("pages/05_Genome_Organization.py")
 if nav_col2.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_id'])}", use_container_width=True):
     selected_id = int(row["tale_id"])
     st.session_state["selected_tale_id"] = selected_id

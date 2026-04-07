@@ -233,6 +233,31 @@ def load_sample_map_source() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def load_tale_set_cluster_source() -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT fm.family_id AS family,
+               t.id AS tale_id,
+               t.is_pseudo,
+               a.id AS assembly_id,
+               a.accession,
+               a.replicon_type,
+               s.id AS sample_id,
+               s.strain_name,
+               s.legacy_strain_name,
+               tx.species,
+               tx.pathovar,
+               tx.raw_name AS taxon_name
+        FROM tale_family_member fm
+        JOIN tale t ON t.id = fm.tale_id
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        LEFT JOIN samples s ON s.id = a.sample_id
+        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
+        """
+    )
+
+
+@st.cache_data(show_spinner=False)
 def load_family_tale_rows(family_name: str) -> pd.DataFrame:
     return query_df(
         """

@@ -7,7 +7,7 @@ Streamlit app for interactive exploration of the local `data/annotale.db` SQLite
 - Inspect database tables, schemas, and sample rows.
 - Explore TALE and family-level distributions, including taxonomy mismatch summaries.
 - Navigate TALE family trees with linked TALE selection.
-- Compare family counts by species/pathovar/strain.
+- Compare TALE family sets and family counts across species/pathovar/strain in a combined comparison view.
 - Visualize sample geography on a country-level map.
 - Inspect TALE genomic organization across assemblies and strands.
 - Open a dedicated TALE detail view with sequence downloads and external links.

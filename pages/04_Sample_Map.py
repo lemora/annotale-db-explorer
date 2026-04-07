@@ -763,7 +763,7 @@ def render_sample_navigation_card(
             st.session_state.pop("genome_org_assemblies", None)
             st.session_state["genome_org_previous_scope"] = None
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/06_Genome_Organization.py")
+                st.switch_page("pages/05_Genome_Organization.py")
 
 
 previous_page = st.session_state.get("active_page")

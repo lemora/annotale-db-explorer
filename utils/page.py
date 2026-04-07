@@ -19,11 +19,11 @@ SIDEBAR_PAGES = [
     ("Home", "Home", "pages/00_Home.py"),
     ("DB Overview", "DB Overview", "pages/01_DB_Overview.py"),
     ("Distributions", "Distributions", "pages/02_Distributions.py"),
-    ("Crosstab", "Crosstab", "pages/04_Crosstab.py"),
-    ("Sample Map", "Sample Map", "pages/05_Sample_Map.py"),
-    ("Genome Organization", "Genome Organization", "pages/06_Genome_Organization.py"),
-    ("TALE Detail", "TALE Detail", "pages/07_TALE_Detail.py"),
+    ("Sample Map", "Sample Map", "pages/04_Sample_Map.py"),
+    ("Genome Organization", "Genome Organization", "pages/05_Genome_Organization.py"),
+    ("TALE Detail", "TALE Detail", "pages/06_TALE_Detail.py"),
     ("TALE Families", "TALE Families", "pages/03_TALE_Families.py"),
+    ("TALE Family Analysis", "TALE Family Analysis", "pages/07_TALE_Family_Analysis.py"),
 ]
 
 
