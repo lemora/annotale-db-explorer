@@ -497,8 +497,9 @@ def render_crosstab_section() -> None:
 init_page(PAGE_TITLE, PAGE_TITLE)
 st.title(PAGE_TITLE)
 st.caption(
-    "This page combines two complementary views: a Jaccard-based comparison of aggregated TALE family sets, "
-    "and a family-count crosstab showing how many TALEs from each family are observed per selected grouping."
+    "This page combines two complementary views: a family-count crosstab showing how many TALEs "
+    "from each family are observed per selected grouping, and a Jaccard-based comparison of aggregated "
+    "TALE family sets."
 )
 
 render_crosstab_section()
@@ -541,15 +542,6 @@ metric_col4.metric("Top pair Jaccard", f"{max_pair_similarity:.2f}")
 
 render_similarity_heatmap(similarity_view.order, heatmap_df)
 st.caption("Click a heatmap cell to populate the pair inspector below.")
-st.caption(
-    "Higher-level TALE family sets are aggregated from their associated strains. "
-    "`Union` includes a family if any strain has it, `Majority` includes it if at least half of strains have it, "
-    "and `Core` includes it only if all associated strains have it."
-)
-st.caption(
-    "Jaccard similarity is computed for the x-axis entity set `A` and the y-axis entity set `B` as "
-    "`|A ∩ B| / |A ∪ B|`. Because intersection and union are symmetric, the heatmap is mirrored across the diagonal."
-)
 
 with st.expander("Strongest Overlaps", expanded=False):
     if similarity_view.pair_table.empty:

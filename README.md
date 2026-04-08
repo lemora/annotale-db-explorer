@@ -5,12 +5,12 @@ Streamlit app for interactive exploration of the local `data/annotale.db` SQLite
 ## What You Can Do
 
 - Inspect database tables, schemas, and sample rows.
-- Explore TALE and family-level distributions, including taxonomy mismatch summaries.
-- Navigate TALE family trees with linked TALE selection.
-- Compare TALE family sets and family counts across species/pathovar/strain in a combined comparison view.
-- Visualize sample geography on a country-level map.
+- Explore TALE distributions across strains and taxa.
+- Visualize sample locations on a country-level map.
 - Inspect TALE genomic organization across assemblies and strands.
-- Open a dedicated TALE detail view with sequence downloads and external links.
+- Open TALE detail views with metadata, links, and sequence downloads.
+- Navigate TALE family trees and linked TALE selections.
+- Compare TALE family counts and family-set similarity across taxa.
 
 ## Requirements
 
@@ -40,6 +40,7 @@ Self-hosted page-visit logging is available and persists in `./analytics/analyti
 - `app.py`: Streamlit entrypoint and page navigation
 - `.streamlit/config.toml`: Streamlit client configuration
 - `pages/`: page rendering and page-local logic
+- `pages/07_TALE_Family_Analysis.py`: family-count crosstab and Jaccard-based TALE family comparison
 - `utils/db.py`: centralized SQL/database query layer
 - `utils/analytics.py`: self-hosted analytics logging
 - `utils/`: shared helpers for page setup, taxonomy handling, tree layout, and theme constants

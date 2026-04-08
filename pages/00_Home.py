@@ -47,9 +47,6 @@ with p1:
         **Distributions**  
         Explore TALE lengths, family sizes, RVD composition, and taxonomy comparison.
 
-        **Crosstab**  
-        Compare TALE family counts across species/pathovars/strains.
-
         **Sample Map**  
         View country-level sample distribution and metadata.
         """
@@ -60,10 +57,13 @@ with p2:
         **Genome Organization**  
         View TALE positions across assemblies and strands for a selected strain.
 
+        **TALE Detail**  
+        Inspect one TALE, download sequences, and follow record-level links.
+
         **TALE Families**  
         Navigate family trees and inspect selected TALE details.
 
-        **TALE Detail**  
-        Inspect one TALE, download sequences, and follow record-level links.
+        **TALE Family Analysis**  
+        Compare TALE family counts across taxa and inspect Jaccard-based family-set similarity.
         """
     )
