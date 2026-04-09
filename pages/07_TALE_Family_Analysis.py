@@ -348,11 +348,19 @@ def render_pair_inspector(similarity_view, selected_pair: tuple[str, str]) -> No
 
 def render_crosstab_section() -> None:
     st.header("Family Count Crosstab")
-    normalize_by_family_size = st.session_state.get(state_key("crosstab_normalize"), False)
-    if normalize_by_family_size:
+    normalization_mode = st.session_state.get(
+        state_key("crosstab_normalization_mode"),
+        "Absolute count",
+    )
+    if normalization_mode == "Normalize by family size":
         st.caption(
             "This heatmap shows each cell as the percentage of all TALEs in a family that are assigned "
             "to the selected species, species/pathovar, or strain. Darker cells indicate a larger share of that family."
+        )
+    elif normalization_mode == "Normalize by entity size":
+        st.caption(
+            "This heatmap shows each cell as the percentage of all TALEs in the selected species, "
+            "species/pathovar, or strain that belong to a given family. Darker cells indicate families that make up a larger share of that entity."
         )
     else:
         st.caption(
@@ -380,19 +388,24 @@ def render_crosstab_section() -> None:
             ),
         )
 
-    normalize_by_family_size = st.checkbox(
-        "Normalize by family size",
-        value=False,
-        key=state_key("crosstab_normalize"),
-        help="Show each cell as the percentage of all TALEs in that family that fall into the given row, instead of absolute counts.",
+    normalization_mode = st.radio(
+        "Cell values",
+        ["Absolute count", "Normalize by family size", "Normalize by entity size"],
+        index=0,
+        horizontal=True,
+        key=state_key("crosstab_normalization_mode"),
+        help=(
+            "`Absolute count` shows raw TALE counts. `Normalize by family size` shows what share of a family falls into each row. "
+            "`Normalize by entity size` shows what share of a row belongs to each family."
+        ),
     )
     axis_order_mode = st.radio(
         "Heatmap axis ordering",
         ["Alphabetical", "Total count"],
-        index=1,
+        index=0,
         horizontal=True,
         key=state_key("crosstab_axis_order"),
-        help="Changes row and family order only.",
+        help="`Alphabetical` sorts both axes alphabetically. `Total count` keeps families alphabetical and orders rows by total TALE count.",
     )
     show_all_rows = False
     top_n = 20
@@ -403,20 +416,7 @@ def render_crosstab_section() -> None:
             f"Strain crosstabs are shown in fixed windows of {CROSSTAB_STRAIN_WINDOW_SIZE} rows to keep rendering responsive."
         )
     else:
-        show_all_rows = view == "Species" or st.checkbox(
-            "Show all crosstab rows",
-            value=False,
-            key=state_key("crosstab_show_all"),
-        )
-        top_n = st.slider(
-            "Show top crosstab rows",
-            min_value=5,
-            max_value=100,
-            value=20,
-            step=5,
-            disabled=show_all_rows,
-            key=state_key("crosstab_top_n"),
-        )
+        show_all_rows = True
 
     crosstab_view = build_crosstab_view(
         view=view,
@@ -426,7 +426,7 @@ def render_crosstab_section() -> None:
         row_window_index=row_window_index,
         row_window_size=CROSSTAB_STRAIN_WINDOW_SIZE,
         axis_order_mode=axis_order_mode,
-        normalize_by_family_size=normalize_by_family_size,
+        normalization_mode=normalization_mode,
     )
     if crosstab_view.long_df.empty:
         st.info("No family/strain data available for the current crosstab settings.")
@@ -442,7 +442,7 @@ def render_crosstab_section() -> None:
             row_window_index=row_window_index,
             row_window_size=CROSSTAB_STRAIN_WINDOW_SIZE,
             axis_order_mode=axis_order_mode,
-            normalize_by_family_size=normalize_by_family_size,
+            normalization_mode=normalization_mode,
         )
         start_row = row_window_index * CROSSTAB_STRAIN_WINDOW_SIZE + 1
         end_row = min(crosstab_view.total_row_count, start_row + len(crosstab_view.rows) - 1)
@@ -451,7 +451,7 @@ def render_crosstab_section() -> None:
         )
 
     chart_height = max(450, 24 * len(crosstab_view.rows))
-    value_format = ".1f" if crosstab_view.value_column == "family_percent" else ".0f"
+    value_format = ".1f" if crosstab_view.value_column in {"family_percent", "entity_percent"} else ".0f"
     tooltip = [
         alt.Tooltip("row_label:N", title=crosstab_view.y_title),
         alt.Tooltip("family:N", title="Family"),
@@ -489,8 +489,14 @@ def render_crosstab_section() -> None:
             tooltip=tooltip,
         )
     )
-    if normalize_by_family_size:
-        st.caption("Normalized view: each cell shows the percentage of all TALEs in that family assigned to the displayed row.")
+    if normalization_mode == "Normalize by family size":
+        st.caption(
+            "Normalized view: each cell shows the percentage of all TALEs in that family assigned to the displayed row."
+        )
+    elif normalization_mode == "Normalize by entity size":
+        st.caption(
+            "Normalized view: each cell shows the percentage of all TALEs in the displayed row assigned to that family."
+        )
     st.altair_chart(chart.properties(height=chart_height), use_container_width=True)
 
 

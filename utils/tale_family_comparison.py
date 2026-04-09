@@ -138,7 +138,7 @@ def build_crosstab_view(
     row_window_index: int,
     row_window_size: int,
     axis_order_mode: str,
-    normalize_by_family_size: bool,
+    normalization_mode: str,
 ) -> CrosstabViewResult:
     raw = load_crosstab_source()
     if raw.empty:
@@ -158,6 +158,7 @@ def build_crosstab_view(
             entity_level=view,
             include_incomplete_taxa=include_incomplete_taxa,
         )
+    raw["family"] = raw["family"].astype(str)
 
     sample_tax = raw.drop_duplicates(subset=["sample_id"])
     if view != "Strain":
@@ -210,12 +211,8 @@ def build_crosstab_view(
     else:
         rows = row_totals.head(top_n).index.tolist()
 
-    if axis_order_mode == "Total count":
-        families = family_totals.sort_values(ascending=False).index.tolist()
-        if show_all_rows or view == "Species":
-            rows = row_totals.index.tolist()
-    else:
-        families = sorted(family_totals.index.tolist())
+    families = sorted(family_totals.index.tolist())
+    if axis_order_mode != "Total count":
         rows = sorted(rows)
 
     if view == "Strain":
@@ -232,6 +229,7 @@ def build_crosstab_view(
         var_name="family",
         value_name="count",
     )
+    long_df["family"] = long_df["family"].astype(str)
 
     y_title = "Strain" if view == "Strain" else view
     if view == "Strain":
@@ -246,13 +244,20 @@ def build_crosstab_view(
         )
         long_df = long_df.merge(row_meta, on="row_label", how="left")
 
-    if normalize_by_family_size:
+    if normalization_mode == "Normalize by family size":
         long_df["family_total"] = long_df["family"].map(family_totals).fillna(0.0)
         long_df["family_percent"] = (
             100.0 * long_df["count"] / long_df["family_total"].where(long_df["family_total"] > 0, pd.NA)
         ).fillna(0.0)
         value_column = "family_percent"
         value_title = "Family share (%)"
+    elif normalization_mode == "Normalize by entity size":
+        long_df["row_total"] = long_df["row_label"].map(row_totals).fillna(0.0)
+        long_df["entity_percent"] = (
+            100.0 * long_df["count"] / long_df["row_total"].where(long_df["row_total"] > 0, pd.NA)
+        ).fillna(0.0)
+        value_column = "entity_percent"
+        value_title = "Entity share (%)"
     else:
         value_column = "count"
         value_title = "TALE count"
