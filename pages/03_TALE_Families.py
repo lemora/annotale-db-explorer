@@ -571,7 +571,7 @@ with left:
     st.download_button(
         "📥 Download Family TALEs as Genomic FASTA",
         data=family_fasta_payload,
-        file_name=f"{slugify_filename_part(family_name)}_family_tales_as_genomic_fasta.fasta",
+        file_name=f"annotale_tales_{slugify_filename_part(family_name)}_family_genomic.fasta",
         mime="text/plain",
         disabled=not bool(family_fasta_payload),
         help="Downloads genomic DNA sequences for all TALEs in the selected family.",

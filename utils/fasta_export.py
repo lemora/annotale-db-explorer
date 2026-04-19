@@ -82,13 +82,6 @@ def genomic_location(accession: object, start_pos: object, end_pos: object, stra
     return f"[{accession_text}]"
 
 
-def primary_tale_label(tale_name: object, family: object) -> str:
-    tale_text = optional_text(tale_name)
-    if tale_text:
-        return tale_text.split()[0]
-    return coalesce_text(family)
-
-
 def tale_alias_text(tale_name: object) -> str:
     tale_text = optional_text(tale_name)
     if not tale_text:
@@ -102,26 +95,29 @@ def tale_alias_text(tale_name: object) -> str:
     return cleaned_parts[0] if cleaned_parts else ""
 
 
-def enumerate_primary_tale_labels(
+def stable_tale_id_label(tale_id: object) -> str:
+    if pd.isna(tale_id):
+        return "taleidunknown"
+    try:
+        tale_id_token = str(int(tale_id))
+    except (TypeError, ValueError):
+        tale_id_token = re.sub(r"[^0-9A-Za-z]+", "_", str(tale_id).strip()).strip("_")
+    return f"taleid{tale_id_token}" if tale_id_token else "taleidunknown"
+
+
+def stable_tale_download_file_stub(tale_id: object) -> str:
+    return f"annotale_tales_{slugify_filename_part(stable_tale_id_label(tale_id))}"
+
+
+def enumerate_stable_tale_labels(
     frame: pd.DataFrame,
     *,
-    tale_name_col: str = "tale_name",
-    family_col: str = "family",
+    tale_id_col: str = "tale_id",
 ) -> pd.Series:
-    base_labels = frame.apply(
-        lambda row: primary_tale_label(row.get(tale_name_col), row.get(family_col)),
+    return frame.apply(
+        lambda row: stable_tale_id_label(row.get(tale_id_col)),
         axis=1,
     )
-    counts = base_labels.value_counts()
-    running_counts: dict[str, int] = {}
-    numbered_labels: list[str] = []
-    for label in base_labels.tolist():
-        if counts.get(label, 0) <= 1:
-            numbered_labels.append(label)
-            continue
-        running_counts[label] = running_counts.get(label, 0) + 1
-        numbered_labels.append(f"{label}{running_counts[label]}")
-    return pd.Series(numbered_labels, index=frame.index)
 
 
 def build_multi_fasta(frame: pd.DataFrame, *, sort_columns: list[str]) -> str:
@@ -129,7 +125,7 @@ def build_multi_fasta(frame: pd.DataFrame, *, sort_columns: list[str]) -> str:
         return ""
 
     ordered = frame.sort_values(sort_columns, na_position="last").copy()
-    ordered["download_tale_label"] = enumerate_primary_tale_labels(ordered)
+    ordered["download_tale_label"] = enumerate_stable_tale_labels(ordered)
 
     fasta_entries: list[str] = []
     for row in ordered.itertuples(index=False):
@@ -142,6 +138,7 @@ def build_multi_fasta(frame: pd.DataFrame, *, sort_columns: list[str]) -> str:
             species=getattr(row, "species", None),
             pathovar=getattr(row, "pathovar", None),
             taxon_name=getattr(row, "taxon_name", None),
+            tale_id=getattr(row, "tale_id", None),
             sample_name=getattr(row, "sample_name", getattr(row, "strain_name", None)),
             legacy_sample_name=getattr(row, "legacy_strain_name", None),
             tale_name=getattr(row, "tale_name", None),
@@ -161,6 +158,7 @@ def tale_download_header(
     species: object = None,
     pathovar: object = None,
     taxon_name: object = None,
+    tale_id: object = None,
     sample_name: object,
     legacy_sample_name: object = None,
     tale_name: object,
@@ -169,7 +167,7 @@ def tale_download_header(
     end_pos: object = None,
     strand: object = None,
 ) -> str:
-    display_label = optional_text(tale_label) or primary_tale_label(tale_name, family)
+    display_label = optional_text(tale_label) or stable_tale_id_label(tale_id)
     taxon_label = legacy_taxon_label(sample_name, legacy_sample_name) or abbreviated_taxon(
         species, pathovar, taxon_name
     )

@@ -4,7 +4,11 @@ import streamlit as st
 
 from utils.analytics import track_page_visit
 from utils.db import load_tale_detail, load_tale_options, load_tale_rvds
-from utils.fasta_export import fasta_text, slugify_filename_part, tale_download_header
+from utils.fasta_export import (
+    fasta_text,
+    stable_tale_download_file_stub,
+    tale_download_header,
+)
 from utils.page import init_page
 from utils.theme import blue_card_dark_mode_css
 
@@ -467,6 +471,7 @@ dna_header = tale_download_header(
     species=row.get("species"),
     pathovar=row.get("pathovar"),
     taxon_name=row.get("taxon_name"),
+    tale_id=row.get("tale_id"),
     sample_name=sample_name,
     legacy_sample_name=row.get("legacy_strain_name"),
     tale_name=row.get("tale_name"),
@@ -480,6 +485,7 @@ protein_header = tale_download_header(
     species=row.get("species"),
     pathovar=row.get("pathovar"),
     taxon_name=row.get("taxon_name"),
+    tale_id=row.get("tale_id"),
     sample_name=sample_name,
     legacy_sample_name=row.get("legacy_strain_name"),
     tale_name=row.get("tale_name"),
@@ -488,13 +494,13 @@ protein_header = tale_download_header(
     end_pos=row.get("end_pos"),
     strand=row.get("strand"),
 )
-file_stub = slugify_filename_part(
-    f"{row.get('tale_name')}_{sample_name}_{row.get('accession')}"
+file_stub = stable_tale_download_file_stub(
+    row.get("tale_id"),
 )
 download_cols[0].download_button(
     "📥 Download DNA FASTA",
     data=fasta_text(dna_header, dna_seq),
-    file_name=f"{file_stub}_tale_dna_sequence.fasta",
+    file_name=f"{file_stub}_dna.fasta",
     mime="text/plain",
     disabled=not bool(dna_seq),
     use_container_width=True,
@@ -502,7 +508,7 @@ download_cols[0].download_button(
 download_cols[1].download_button(
     "📥 Download Protein FASTA",
     data=fasta_text(protein_header, protein_seq),
-    file_name=f"{file_stub}_tale_protein_sequence.fasta",
+    file_name=f"{file_stub}_protein.fasta",
     mime="text/plain",
     disabled=not bool(protein_seq),
     use_container_width=True,

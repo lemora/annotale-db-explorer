@@ -987,10 +987,7 @@ def render_selection_summary(
         tales,
         sort_columns=["assembly_label", "start_pos", "end_pos", "tale_id"],
     )
-    file_name = (
-        f"{slugify_filename_part(sample_name)}"
-        f"_strain_tales_as_genomic_fasta.fasta"
-    )
+    file_name = f"annotale_tales_{slugify_filename_part(sample_name)}_strain_genomic.fasta"
     action_col1, action_col2, _ = st.columns([1.5, 2.2, 5.3], gap="small")
     with action_col1:
         if st.button("📍 Open Strain in Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
