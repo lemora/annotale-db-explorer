@@ -95,27 +95,38 @@ def tale_alias_text(tale_name: object) -> str:
     return cleaned_parts[0] if cleaned_parts else ""
 
 
-def stable_tale_id_label(tale_id: object) -> str:
+def stable_tale_class_label(family: object) -> str:
+    family_text = optional_text(family)
+    if not family_text:
+        return "talclassunknown"
+    family_token = re.sub(r"[^0-9A-Za-z]+", "_", family_text.strip()).strip("_")
+    return family_token or "talclassunknown"
+
+
+def stable_tale_id_label(tale_id: object, family: object = None) -> str:
     if pd.isna(tale_id):
-        return "taleidunknown"
-    try:
-        tale_id_token = str(int(tale_id))
-    except (TypeError, ValueError):
-        tale_id_token = re.sub(r"[^0-9A-Za-z]+", "_", str(tale_id).strip()).strip("_")
-    return f"taleid{tale_id_token}" if tale_id_token else "taleidunknown"
+        tale_id_label = "taleidunknown"
+    else:
+        try:
+            tale_id_token = str(int(tale_id))
+        except (TypeError, ValueError):
+            tale_id_token = re.sub(r"[^0-9A-Za-z]+", "_", str(tale_id).strip()).strip("_")
+        tale_id_label = f"taleid{tale_id_token}" if tale_id_token else "taleidunknown"
+    return f"{tale_id_label}_{stable_tale_class_label(family)}"
 
 
-def stable_tale_download_file_stub(tale_id: object) -> str:
-    return f"annotale_tales_{slugify_filename_part(stable_tale_id_label(tale_id))}"
+def stable_tale_download_file_stub(tale_id: object, family: object = None) -> str:
+    return f"annotale_tales_{slugify_filename_part(stable_tale_id_label(tale_id, family))}"
 
 
 def enumerate_stable_tale_labels(
     frame: pd.DataFrame,
     *,
     tale_id_col: str = "tale_id",
+    family_col: str = "family",
 ) -> pd.Series:
     return frame.apply(
-        lambda row: stable_tale_id_label(row.get(tale_id_col)),
+        lambda row: stable_tale_id_label(row.get(tale_id_col), row.get(family_col)),
         axis=1,
     )
 
@@ -167,7 +178,7 @@ def tale_download_header(
     end_pos: object = None,
     strand: object = None,
 ) -> str:
-    display_label = optional_text(tale_label) or stable_tale_id_label(tale_id)
+    display_label = optional_text(tale_label) or stable_tale_id_label(tale_id, family)
     taxon_label = legacy_taxon_label(sample_name, legacy_sample_name) or abbreviated_taxon(
         species, pathovar, taxon_name
     )

@@ -496,6 +496,7 @@ protein_header = tale_download_header(
 )
 file_stub = stable_tale_download_file_stub(
     row.get("tale_id"),
+    family_name,
 )
 download_cols[0].download_button(
     "📥 Download DNA FASTA",
