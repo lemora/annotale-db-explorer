@@ -24,11 +24,16 @@ SET_AGGREGATION_OPTIONS = [
 ]
 
 
-def strain_label(df: pd.DataFrame) -> pd.Series:
+def preferred_strain_label(df: pd.DataFrame, default: str | None = None) -> pd.Series:
     strain_name = df["strain_name"].fillna("").astype(str).str.strip()
     legacy_name = df["legacy_strain_name"].fillna("").astype(str).str.strip()
     label = strain_name.where(strain_name != "", legacy_name)
-    return label.where(label != "", "Unknown strain")
+    fallback = pd.NA if default is None else default
+    return label.where(label != "", fallback)
+
+
+def strain_label(df: pd.DataFrame) -> pd.Series:
+    return preferred_strain_label(df, default="Unknown strain")
 
 
 def assembly_label(df: pd.DataFrame) -> pd.Series:
@@ -42,12 +47,12 @@ def assembly_label(df: pd.DataFrame) -> pd.Series:
 
 
 def entity_labels(source: pd.DataFrame, entity_level: str) -> pd.Series:
-    sample_tax = source.drop_duplicates(subset=["sample_id"])
     if entity_level == "Strain":
         return strain_label(source)
     if entity_level == "Assembly / Replicon":
         return assembly_label(source)
 
+    sample_tax = source.drop_duplicates(subset=["sample_id"])
     include_pathovar = entity_level == "Species + Pathovar"
     legacy_map = build_legacy_taxon_map(
         sample_tax,

@@ -5,7 +5,6 @@ Streamlit app for interactive exploration of the local `data/annotale.db` SQLite
 ## What You Can Do
 
 - Inspect database tables, schemas, and sample rows.
-- Explore TALE distributions across strains and taxa.
 - Visualize sample locations on a country-level map.
 - Inspect TALE genomic organization across assemblies and strands.
 - Open TALE detail views with metadata, links, and sequence downloads.

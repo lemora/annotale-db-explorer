@@ -114,6 +114,41 @@ def apply_taxon_fallback(
     return result
 
 
+def resolved_taxon_labels(
+    df: pd.DataFrame,
+    include_pathovar: bool,
+    *,
+    abbreviate: bool = False,
+    id_col: str | None = "sample_id",
+    legacy_col: str = "legacy_strain_name",
+    species_col: str = "species",
+    pathovar_col: str = "pathovar",
+    taxon_name_col: str = "taxon_name",
+) -> pd.Series:
+    legacy_map = build_legacy_taxon_map(
+        df,
+        include_pathovar=include_pathovar,
+        legacy_col=legacy_col,
+        sample_id_col=id_col,
+        species_col=species_col,
+        pathovar_col=pathovar_col,
+        taxon_name_col=taxon_name_col,
+    )
+    labels = apply_taxon_fallback(
+        df,
+        include_pathovar=include_pathovar,
+        legacy_map=legacy_map,
+        id_col=id_col,
+        legacy_col=legacy_col,
+        species_col=species_col,
+        pathovar_col=pathovar_col,
+        taxon_name_col=taxon_name_col,
+    )
+    if abbreviate:
+        labels = abbreviate_taxon_labels(labels)
+    return labels
+
+
 def filter_incomplete_taxa(
     df: pd.DataFrame,
     entity_level: str,

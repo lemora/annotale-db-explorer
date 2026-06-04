@@ -24,9 +24,8 @@ st.title("AnnoTALE DB Explorer")
 st.markdown(HOME_CAPTION_HTML, unsafe_allow_html=True)
 st.markdown(
     """
-    Use the sidebar to move through database overview, TALE distributions,
-    crosstabs, sample geography, family trees, genome organization,
-    and individual TALE detail.
+    Use the sidebar to move through database overview, sample geography,
+    genome organization, individual TALE detail, family trees and family analysis.
     """
 )
 
@@ -55,9 +54,6 @@ with p1:
         """
         **DB Overview**  
         Inspect table counts, schemas, and sample rows.
-
-        **Distributions**  
-        Explore TALE lengths, family sizes, RVD composition, and taxonomy comparison.
 
         **Sample Map**  
         View country-level sample distribution and metadata.

@@ -10,7 +10,9 @@ from utils.clustering import (
     build_heatmap_long_df,
     build_top_pair_table,
     compute_similarity,
+    entity_labels,
     order_entities,
+    strain_label,
 )
 from utils.db import load_crosstab_source, load_tale_set_cluster_source
 from utils.taxonomy import (
@@ -160,34 +162,18 @@ def build_crosstab_view(
         )
     raw["family"] = raw["family"].astype(str)
 
-    sample_tax = raw.drop_duplicates(subset=["sample_id"])
     if view != "Strain":
-        include_pathovar = view == "Species + Pathovar"
-        legacy_map = build_legacy_taxon_map(
-            sample_tax,
-            include_pathovar=include_pathovar,
-            legacy_col="legacy_strain_name",
-            sample_id_col="sample_id",
-        )
-        raw["row_label"] = apply_taxon_fallback(
-            raw,
-            include_pathovar=include_pathovar,
-            legacy_map=legacy_map,
-            id_col="sample_id",
-            legacy_col="legacy_strain_name",
-        )
+        raw["row_label"] = entity_labels(raw, view)
         raw = raw.groupby(["row_label", "family"]).size().reset_index(name="count")
     else:
+        sample_tax = raw.drop_duplicates(subset=["sample_id"])
         legacy_map = build_legacy_taxon_map(
             sample_tax,
             include_pathovar=True,
             legacy_col="legacy_strain_name",
             sample_id_col="sample_id",
         )
-        strain_name = raw["strain_name"].fillna("").str.strip()
-        legacy_name = raw["legacy_strain_name"].fillna("").str.strip()
-        raw["row_label"] = strain_name.where(strain_name != "", legacy_name)
-        raw["row_label"] = raw["row_label"].where(raw["row_label"] != "", "Unknown")
+        raw["row_label"] = strain_label(raw).replace("Unknown strain", "Unknown")
         raw["species_pathovar"] = apply_taxon_fallback(
             raw,
             include_pathovar=True,

@@ -5,12 +5,11 @@ import streamlit as st
 from streamlit_plotly_events import plotly_events
 
 from utils.analytics import track_page_visit
+from utils.clustering import preferred_strain_label
 from utils.db import load_sample_map_source, load_sample_taxonomy
 from utils.page import init_page
 from utils.taxonomy import (
-    abbreviate_taxon_labels,
-    apply_taxon_fallback,
-    build_legacy_taxon_map,
+    resolved_taxon_labels,
 )
 
 INVALID_COUNTRY_LABELS = {"unknown", "missing", "-"}
@@ -122,9 +121,7 @@ def to_int(value: str | None) -> int | None:
 @st.cache_data(show_spinner=False)
 def build_sample_map_base() -> pd.DataFrame:
     raw = load_sample_map_source().copy()
-    raw["strain_display"] = raw["strain_name"].fillna(raw["legacy_strain_name"]).fillna(
-        "Unknown"
-    )
+    raw["strain_display"] = preferred_strain_label(raw, default="Unknown")
     raw["country"] = raw["geo_tag"].apply(parse_country)
     return raw
 
@@ -132,21 +129,10 @@ def build_sample_map_base() -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def build_taxonomy_labels(include_pathovar: bool) -> pd.DataFrame:
     tax_raw = load_sample_taxonomy().copy()
-    legacy_map = build_legacy_taxon_map(
+    tax_raw["species_pathovar"] = resolved_taxon_labels(
         tax_raw,
         include_pathovar=include_pathovar,
-        legacy_col="legacy_strain_name",
-        sample_id_col="sample_id",
-    )
-    tax_raw["species_pathovar"] = apply_taxon_fallback(
-        tax_raw,
-        include_pathovar=include_pathovar,
-        legacy_map=legacy_map,
-        id_col="sample_id",
-        legacy_col="legacy_strain_name",
-    )
-    tax_raw["species_pathovar"] = abbreviate_taxon_labels(
-        tax_raw["species_pathovar"]
+        abbreviate=True,
     )
     return tax_raw[["sample_id", "species_pathovar"]]
 
@@ -154,18 +140,9 @@ def build_taxonomy_labels(include_pathovar: bool) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def build_taxonomy_filter_rows() -> pd.DataFrame:
     tax_raw = load_sample_taxonomy().copy()
-    legacy_map = build_legacy_taxon_map(
+    combined = resolved_taxon_labels(
         tax_raw,
         include_pathovar=True,
-        legacy_col="legacy_strain_name",
-        sample_id_col="sample_id",
-    )
-    combined = apply_taxon_fallback(
-        tax_raw,
-        include_pathovar=True,
-        legacy_map=legacy_map,
-        id_col="sample_id",
-        legacy_col="legacy_strain_name",
     ).fillna("Unknown")
 
     split_values = combined.apply(split_species_pathovar)

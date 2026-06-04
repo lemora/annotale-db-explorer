@@ -7,12 +7,23 @@ from typing import Iterable
 import pandas as pd
 import streamlit as st
 
+from utils.clustering import preferred_strain_label
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = REPO_ROOT / "data" / "annotale.db"
 
 
-@st.cache_resource
+def db_fingerprint() -> tuple[int, int]:
+    stat = DB_PATH.stat()
+    return stat.st_mtime_ns, stat.st_size
+
+
 def get_conn() -> sqlite3.Connection:
+    return _get_conn(db_fingerprint())
+
+
+@st.cache_resource
+def _get_conn(fingerprint: tuple[int, int]) -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=rw", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
@@ -23,23 +34,35 @@ def query_df(query: str, params: Iterable | None = None) -> pd.DataFrame:
     return pd.read_sql_query(query, conn, params=params)
 
 
-@st.cache_data(show_spinner=False)
 def list_tables() -> list[str]:
+    return _list_tables(db_fingerprint())
+
+
+@st.cache_data(show_spinner=False)
+def _list_tables(fingerprint: tuple[int, int]) -> list[str]:
     rows = query_df(
         "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name"
     )
     return rows["name"].tolist()
 
 
-@st.cache_data(show_spinner=False)
 def table_schema(table_name: str) -> pd.DataFrame:
+    return _table_schema(table_name, db_fingerprint())
+
+
+@st.cache_data(show_spinner=False)
+def _table_schema(table_name: str, fingerprint: tuple[int, int]) -> pd.DataFrame:
     if table_name not in list_tables():
         raise ValueError(f"Unknown table: {table_name}")
     return query_df(f"PRAGMA table_info({table_name})")
 
 
-@st.cache_data(show_spinner=False)
 def table_counts() -> pd.DataFrame:
+    return _table_counts(db_fingerprint())
+
+
+@st.cache_data(show_spinner=False)
+def _table_counts(fingerprint: tuple[int, int]) -> pd.DataFrame:
     names = list_tables()
     data = []
     conn = get_conn()
@@ -51,13 +74,57 @@ def table_counts() -> pd.DataFrame:
     return pd.DataFrame(data).sort_values("rows", ascending=False)
 
 
-@st.cache_data(show_spinner=False)
 def table_rows(table_name: str, limit: int | None = None) -> pd.DataFrame:
+    return _table_rows(table_name, limit, db_fingerprint())
+
+
+@st.cache_data(show_spinner=False)
+def _table_rows(
+    table_name: str, limit: int | None, fingerprint: tuple[int, int]
+) -> pd.DataFrame:
     if table_name not in list_tables():
         raise ValueError(f"Unknown table: {table_name}")
     if limit is None:
         return query_df(f"SELECT * FROM {table_name}")
     return query_df(f"SELECT * FROM {table_name} LIMIT ?", params=[int(limit)])
+
+
+def quote_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def foreign_key_relations() -> pd.DataFrame:
+    return _foreign_key_relations(db_fingerprint())
+
+
+@st.cache_data(show_spinner=False)
+def _foreign_key_relations(fingerprint: tuple[int, int]) -> pd.DataFrame:
+    conn = get_conn()
+    rows = []
+    for table in list_tables():
+        fk_rows = conn.execute(f"PRAGMA foreign_key_list({quote_identifier(table)})").fetchall()
+        for fk in fk_rows:
+            rows.append(
+                {
+                    "source_table": table,
+                    "source_column": fk["from"],
+                    "target_table": fk["table"],
+                    "target_column": fk["to"],
+                    "on_update": fk["on_update"],
+                    "on_delete": fk["on_delete"],
+                }
+            )
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "source_table",
+            "source_column",
+            "target_table",
+            "target_column",
+            "on_update",
+            "on_delete",
+        ],
+    )
 
 
 @st.cache_data(show_spinner=False)
@@ -83,23 +150,6 @@ def load_tales() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def load_tale_distribution_source() -> pd.DataFrame:
-    return query_df(
-        """
-        SELECT t.id,
-               t.is_pseudo,
-               a.sample_id AS strain_id,
-               t.start_pos,
-               t.end_pos,
-               length(t.dna_seq) AS dna_length,
-               length(t.protein_seq) AS protein_length
-        FROM tale t
-        LEFT JOIN assembly a ON a.id = t.assembly_id
-        """
-    )
-
-
-@st.cache_data(show_spinner=False)
 def load_strains() -> pd.DataFrame:
     df = query_df(
         "SELECT s.id AS id, "
@@ -114,15 +164,7 @@ def load_strains() -> pd.DataFrame:
         "FROM samples s "
         "LEFT JOIN taxonomy tx ON tx.id = s.taxon_id"
     )
-    strain_name = df["strain_name"].fillna("").str.strip()
-    legacy_name = df["legacy_strain_name"].fillna("").str.strip()
-
-    def last_token(series: pd.Series) -> pd.Series:
-        return series.str.split().str[-1]
-
-    strain_last = last_token(strain_name)
-    legacy_last = last_token(legacy_name)
-    df["name"] = strain_last.where(strain_name != "", legacy_last)
+    df["name"] = preferred_strain_label(df).str.split().str[-1]
     return df[
         [
             "id",
