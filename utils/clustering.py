@@ -7,8 +7,7 @@ import pandas as pd
 
 from utils.taxonomy import (
     abbreviate_taxon_labels,
-    apply_taxon_fallback,
-    build_legacy_taxon_map,
+    resolved_taxon_labels,
 )
 
 
@@ -52,22 +51,12 @@ def entity_labels(source: pd.DataFrame, entity_level: str) -> pd.Series:
     if entity_level == "Assembly / Replicon":
         return assembly_label(source)
 
-    sample_tax = source.drop_duplicates(subset=["sample_id"])
     include_pathovar = entity_level == "Species + Pathovar"
-    legacy_map = build_legacy_taxon_map(
-        sample_tax,
-        include_pathovar=include_pathovar,
-        legacy_col="legacy_strain_name",
-        sample_id_col="sample_id",
-    )
-    labels = apply_taxon_fallback(
+    labels = resolved_taxon_labels(
         source,
         include_pathovar=include_pathovar,
-        legacy_map=legacy_map,
-        id_col="sample_id",
-        legacy_col="legacy_strain_name",
     )
-    return abbreviate_taxon_labels(labels).fillna("Unknown")
+    return abbreviate_taxon_labels(labels)
 
 
 def build_entity_family_presence(
@@ -303,47 +292,3 @@ def shared_family_lists(
     left_only = families[left_presence & ~right_presence].tolist()
     right_only = families[right_presence & ~left_presence].tolist()
     return shared, left_only, right_only
-
-
-def classical_mds_projection(
-    similarity: pd.DataFrame,
-    family_sizes: pd.Series,
-) -> pd.DataFrame:
-    if similarity.empty:
-        return pd.DataFrame(columns=["entity", "x", "y", "family_count"])
-
-    labels = similarity.index.tolist()
-    if len(labels) == 1:
-        return pd.DataFrame(
-            {
-                "entity": labels,
-                "x": [0.0],
-                "y": [0.0],
-                "family_count": [float(family_sizes.iloc[0])],
-            }
-        )
-
-    distance = 1.0 - similarity.to_numpy(dtype=float)
-    squared = distance ** 2
-    n = squared.shape[0]
-    centering = np.eye(n) - np.ones((n, n)) / n
-    gram = -0.5 * centering @ squared @ centering
-
-    eigenvalues, eigenvectors = np.linalg.eigh(gram)
-    order = np.argsort(eigenvalues)[::-1]
-    eigenvalues = eigenvalues[order]
-    eigenvectors = eigenvectors[:, order]
-
-    positive = np.clip(eigenvalues[:2], a_min=0.0, a_max=None)
-    coords = eigenvectors[:, :2] * np.sqrt(positive)
-    if coords.shape[1] < 2:
-        coords = np.pad(coords, ((0, 0), (0, 2 - coords.shape[1])))
-
-    return pd.DataFrame(
-        {
-            "entity": labels,
-            "x": coords[:, 0],
-            "y": coords[:, 1],
-            "family_count": family_sizes.reindex(labels).astype(float).to_numpy(),
-        }
-    )

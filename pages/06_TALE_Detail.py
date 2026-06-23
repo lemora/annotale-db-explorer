@@ -5,6 +5,7 @@ import streamlit as st
 from utils.analytics import track_page_visit
 from utils.db import load_tale_detail, load_tale_options, load_tale_rvds
 from utils.fasta_export import (
+    coalesce_text,
     fasta_text,
     stable_tale_download_file_stub,
     tale_download_header,
@@ -21,15 +22,6 @@ def to_int(value: str | None) -> int | None:
         return None
     cleaned = str(value).strip()
     return int(cleaned) if cleaned.isdigit() else None
-
-
-def coalesce_text(*values, default: str = "Unknown") -> str:
-    for value in values:
-        if pd.notna(value):
-            text = str(value).strip()
-            if text and text.lower() != "nan":
-                return text
-    return default
 
 
 def taxonomy_label(row: pd.Series) -> str:

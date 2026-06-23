@@ -17,9 +17,8 @@ from utils.clustering import (
 from utils.db import load_crosstab_source, load_tale_set_cluster_source
 from utils.taxonomy import (
     abbreviate_taxon_labels,
-    apply_taxon_fallback,
-    build_legacy_taxon_map,
     filter_incomplete_taxa,
+    resolved_taxon_labels,
 )
 
 
@@ -166,21 +165,11 @@ def build_crosstab_view(
         raw["row_label"] = entity_labels(raw, view)
         raw = raw.groupby(["row_label", "family"]).size().reset_index(name="count")
     else:
-        sample_tax = raw.drop_duplicates(subset=["sample_id"])
-        legacy_map = build_legacy_taxon_map(
-            sample_tax,
-            include_pathovar=True,
-            legacy_col="legacy_strain_name",
-            sample_id_col="sample_id",
-        )
         raw["row_label"] = strain_label(raw).replace("Unknown strain", "Unknown")
-        raw["species_pathovar"] = apply_taxon_fallback(
+        raw["species_pathovar"] = resolved_taxon_labels(
             raw,
             include_pathovar=True,
-            legacy_map=legacy_map,
-            id_col="sample_id",
-            legacy_col="legacy_strain_name",
-        ).fillna("Unknown")
+        )
         raw = raw.groupby(["row_label", "family", "species_pathovar"]).size().reset_index(
             name="count"
         )

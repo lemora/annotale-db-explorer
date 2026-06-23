@@ -22,8 +22,7 @@ from utils.page import init_page
 from utils.theme import PSEUDO_TALE_GREY, SELECTED_ACCENT
 from utils.taxonomy import (
     abbreviate_taxon_labels,
-    apply_taxon_fallback,
-    build_legacy_taxon_map,
+    resolved_taxon_labels,
 )
 from utils.tree import layout_tree, try_parse_newick
 
@@ -471,21 +470,12 @@ def render_species_pathovar_panel(family_name: str) -> None:
         st.info("No species/pathovar data for this family.")
         return
 
-    legacy_map = build_legacy_taxon_map(
+    species_pathovar = resolved_taxon_labels(
         sp_raw,
         include_pathovar=True,
-        legacy_col="legacy_strain_name",
-        sample_id_col="sample_id",
-    )
-    species_pathovar = apply_taxon_fallback(
-        sp_raw,
-        include_pathovar=True,
-        legacy_map=legacy_map,
-        id_col="sample_id",
-        legacy_col="legacy_strain_name",
     )
     sp_counts = (
-        species_pathovar.dropna()
+        species_pathovar
         .value_counts()
         .rename_axis("species_pathovar")
         .reset_index(name="count")

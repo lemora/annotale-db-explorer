@@ -10,7 +10,7 @@ from utils.fasta_export import (
     slugify_filename_part,
 )
 from utils.page import init_page
-from utils.taxonomy import abbreviate_taxon_labels, apply_taxon_fallback, build_legacy_taxon_map
+from utils.taxonomy import abbreviate_taxon_labels, resolved_taxon_labels
 from utils.theme import SELECTED_ACCENT, blue_card_dark_mode_css
 
 init_page("Genome Organization", "Genome Organization", track_analytics=False)
@@ -299,20 +299,11 @@ def load_scope_samples() -> pd.DataFrame:
     if strains.empty:
         return strains
 
-    legacy_map = build_legacy_taxon_map(
-        strains,
-        include_pathovar=True,
-        legacy_col="legacy_strain_name",
-        sample_id_col="id",
-    )
     scoped = strains.copy()
-    scoped["species_pathovar"] = apply_taxon_fallback(
+    scoped["species_pathovar"] = resolved_taxon_labels(
         scoped,
         include_pathovar=True,
-        legacy_map=legacy_map,
-        id_col="id",
-        legacy_col="legacy_strain_name",
-    ).fillna("Unknown")
+    )
     scoped = scoped[scoped["id"].isin(sample_ids_with_tales())].copy()
 
     split_values = scoped["species_pathovar"].apply(split_species_pathovar)
@@ -598,7 +589,6 @@ def compressed_axis_label_expr(assembly_gaps: pd.DataFrame) -> str:
     sorted_gaps = assembly_gaps.sort_values(["gap_start_plot", "gap_end_plot"])
     expr = "datum.value"
     for gap in sorted_gaps.itertuples(index=False):
-        gap_start_plot = float(gap.gap_start_plot)
         gap_marker_plot = float(gap.gap_marker_plot)
         offset_after = float(gap.offset_after)
         expr = (

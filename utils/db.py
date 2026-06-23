@@ -182,51 +182,11 @@ def load_strains() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def load_repeats() -> pd.DataFrame:
-    return query_df(
-        "SELECT tale_id, repeat_ordinal, rvd, rvd_pos, rvd_len, masked_seq_1, masked_seq_2 "
-        "FROM repeat"
-    )
-
-
-@st.cache_data(show_spinner=False)
 def load_sample_taxonomy() -> pd.DataFrame:
     return query_df(
         "SELECT s.id AS sample_id, s.legacy_strain_name, tx.species, tx.pathovar, tx.raw_name AS taxon_name "
         "FROM samples s "
         "LEFT JOIN taxonomy tx ON tx.id = s.taxon_id"
-    )
-
-
-@st.cache_data(show_spinner=False)
-def load_repeat_positions() -> pd.DataFrame:
-    return query_df(
-        """
-        SELECT repeat_ordinal AS position, rvd, tale_id
-        FROM repeat
-        """
-    )
-
-
-@st.cache_data(show_spinner=False)
-def load_taxonomy_comparison_source() -> pd.DataFrame:
-    return query_df(
-        """
-        SELECT s.id AS sample_id,
-               s.legacy_strain_name,
-               tx.ncbi_tax_id,
-               tx.raw_name AS taxon_name,
-               tx.species,
-               tx.pathovar,
-               CASE
-                 WHEN s.legacy_strain_name IS NULL OR TRIM(s.legacy_strain_name) = '' THEN NULL
-                 WHEN instr(TRIM(s.legacy_strain_name), ' ') > 0
-                   THEN substr(TRIM(s.legacy_strain_name), 1, instr(TRIM(s.legacy_strain_name), ' ') - 1)
-                 ELSE TRIM(s.legacy_strain_name)
-               END AS legacy_code
-        FROM samples s
-        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
-        """
     )
 
 
