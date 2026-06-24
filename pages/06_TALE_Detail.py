@@ -40,6 +40,16 @@ def ncbi_nuccore_url(accession: str) -> str:
     return f"https://www.ncbi.nlm.nih.gov/nuccore/{accession}"
 
 
+def ncbi_assembly_url(accession: str) -> str:
+    return f"https://www.ncbi.nlm.nih.gov/assembly/{accession}"
+
+
+def ncbi_accession_url(accession: str, accession_type: object) -> str:
+    if str(accession_type or "").strip().lower() == "assembly":
+        return ncbi_assembly_url(accession)
+    return ncbi_nuccore_url(accession)
+
+
 def ncbi_biosample_url(biosample_id: str) -> str:
     return f"https://www.ncbi.nlm.nih.gov/biosample/{biosample_id}"
 
@@ -212,6 +222,7 @@ protein_seq = coalesce_text(row.get("protein_seq"), default="")
 family_name = coalesce_text(row.get("family"))
 sample_name = coalesce_text(row.get("strain_name"), row.get("legacy_strain_name"))
 assembly_accession = coalesce_text(row.get("accession"))
+assembly_accession_type = row.get("accession_type")
 replicon_type = coalesce_text(row.get("replicon_type"))
 taxonomy_name = taxonomy_label(row)
 current_strand = strand_label(row.get("strand"))
@@ -303,7 +314,11 @@ with link_cols[0]:
         unsafe_allow_html=True,
     )
     if assembly_accession != "Unknown":
-        st.link_button("Open NCBI accession", ncbi_nuccore_url(assembly_accession), use_container_width=True)
+        st.link_button(
+            "Open NCBI accession",
+            ncbi_accession_url(assembly_accession, assembly_accession_type),
+            use_container_width=True,
+        )
 with link_cols[1]:
     biosample_id = coalesce_text(row.get("biosample_id"))
     st.markdown(
