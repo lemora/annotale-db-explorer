@@ -100,9 +100,12 @@ UNPLACED_TABLE_COLUMNS = [
     "tale_name",
     "family",
     "assembly_label",
+    "dna_seq",
     "protein_len",
     "pseudo_label",
 ]
+UNPLACED_TALES_PER_ROW = 5
+UNPLACED_GAP_SCALE = 0.5
 LABEL_TABLE_COLUMNS = [
     "plot_number",
     "tale_id",
@@ -712,6 +715,110 @@ def build_collapsed_gap_marker_rows(assembly_gaps: pd.DataFrame) -> pd.DataFrame
     ].rename(columns={"gap_marker_plot": "marker_x"}).copy()
 
 
+def build_unplaced_grid(unplaced_tales: pd.DataFrame) -> pd.DataFrame:
+    grid = unplaced_tales.copy().reset_index(drop=True)
+    grid["dna_len"] = grid["dna_seq"].fillna("").astype(str).str.len()
+    grid["box_span"] = grid["dna_len"].where(grid["dna_len"] > 0, grid["protein_len"] * 3.0)
+    grid["box_span"] = grid["box_span"].fillna(60.0).astype(float).clip(lower=60.0)
+    gap_size = float(grid["box_span"].max()) * UNPLACED_GAP_SCALE
+
+    starts: list[float] = []
+    ends: list[float] = []
+    lanes: list[str] = []
+    plot_labels: list[str] = []
+    plot_numbers: list[int] = []
+
+    for idx, row in enumerate(grid.itertuples(index=False), start=1):
+        row_idx = (idx - 1) // UNPLACED_TALES_PER_ROW
+        col_idx = (idx - 1) % UNPLACED_TALES_PER_ROW
+        lane = f"row {row_idx + 1}"
+        start_plot = col_idx * gap_size
+        if col_idx:
+            start_plot += grid.iloc[(idx - 1) - col_idx: idx - 1]["box_span"].sum()
+        end_plot = start_plot + float(row.box_span)
+        starts.append(start_plot)
+        ends.append(end_plot)
+        lanes.append(lane)
+        plot_numbers.append(idx)
+        plot_labels.append(str(idx))
+
+    grid["start_plot"] = starts
+    grid["end_plot"] = ends
+    grid["lane"] = lanes
+    grid["plot_number"] = plot_numbers
+    grid["plot_number_label"] = plot_labels
+    grid["box_svg_width"] = (
+        grid["box_span"]
+        .round()
+        .clip(lower=MIN_BOX_SVG_WIDTH, upper=MAX_BOX_SVG_WIDTH)
+        .astype(int)
+    )
+    label_lengths = grid["plot_number_label"].str.len().clip(lower=1)
+    grid["label_natural_width"] = (label_lengths * LABEL_CHAR_WIDTH) + LABEL_WIDTH_PADDING
+    grid["label_font_size"] = (
+        ((grid["box_svg_width"] + LABEL_DOWNSCALE_DELAY_PX) / label_lengths)
+        * LABEL_FONT_SCALE
+    ).clip(lower=MIN_LABEL_FONT_SIZE, upper=MAX_LABEL_FONT_SIZE)
+    return grid
+
+
+def render_unplaced_label_table(unplaced: pd.DataFrame) -> None:
+    label_table = unplaced.rename(
+        columns={
+            "plot_number": "plot TALE number",
+            "tale_id": "id",
+            "tale_name": "name",
+            "family_color": "family color",
+            "assembly_label": "assembly",
+            "dna_len": "dna_length (nt)",
+            "protein_len": "protein_length (aa)",
+            "pseudo_label": "is_pseudo",
+        }
+    )
+    label_table["family color"] = label_table["family color"].fillna("#cccccc")
+    display_table = label_table[
+        [
+            "plot TALE number",
+            "id",
+            "name",
+            "family",
+            "family color",
+            "assembly",
+            "dna_length (nt)",
+            "protein_length (aa)",
+            "is_pseudo",
+        ]
+    ]
+
+    selected_tale_id = st.session_state.get("genome_org_selected_tale_id")
+
+    def highlight_selected_row(row: pd.Series) -> list[str]:
+        if selected_tale_id is not None and int(row["id"]) == int(selected_tale_id):
+            styles = []
+            for column in row.index:
+                cell_style = (
+                    f"border-top: 1px solid {SELECTED_ACCENT}; border-bottom: 1px solid {SELECTED_ACCENT};"
+                )
+                if column != "family color":
+                    cell_style += f" background-color: {SELECTED_ACCENT}22;"
+                styles.append(cell_style)
+            return styles
+        return ["" for _ in row]
+
+    table_height = min(700, max(160, 35 * (len(display_table) + 1)))
+    styler = display_table.style.map(
+        lambda value: f"background-color: {value}; color: {value};",
+        subset=["family color"],
+    )
+    styler = styler.apply(highlight_selected_row, axis=1)
+    styler = styler.map(
+        lambda value: "font-weight: 700;",
+        subset=["plot TALE number"],
+    )
+    styler = styler.hide(axis="index")
+    st.dataframe(styler, use_container_width=True, height=table_height)
+
+
 def render_assembly_chart(
     assembly_tales: pd.DataFrame,
     compress_gaps: bool,
@@ -947,19 +1054,86 @@ def render_label_table(plot_df: pd.DataFrame) -> None:
     st.dataframe(styler, use_container_width=True, height=table_height)
 
 
-def render_unplaced_table(unplaced_tales: pd.DataFrame) -> None:
+def render_unplaced_tales(
+    unplaced_tales: pd.DataFrame,
+    selected_tale_rows: pd.DataFrame,
+) -> None:
     st.subheader("TALEs Without Genomic Coordinates")
-    unplaced = unplaced_tales[UNPLACED_TABLE_COLUMNS].rename(
-        columns={
-            "tale_id": "id",
-            "tale_name": "name",
-            "assembly_label": "assembly",
-            "protein_len": "protein_length (aa)",
-            "pseudo_label": "is_pseudo",
-        }
+    unplaced = build_unplaced_grid(unplaced_tales[UNPLACED_TABLE_COLUMNS])
+    summary_left, summary_mid, summary_right = st.columns(3)
+    summary_left.metric("TALEs", len(unplaced))
+    summary_mid.metric("Families", unplaced["family"].nunique())
+    summary_right.metric("Assemblies", unplaced["assembly_label"].nunique())
+    lane_order = unplaced["lane"].drop_duplicates().tolist()
+    domain_max = float(unplaced["end_plot"].max()) if not unplaced.empty else 1.0
+    assembly_domain = [0.0, max(domain_max, 1.0)]
+    families = sorted(unplaced["family"].dropna().unique().tolist())
+    colors_by_family = family_color_map(families)
+    unplaced["family_color"] = unplaced["family"].map(colors_by_family).fillna("#cccccc")
+    unplaced = add_box_svg_assets(
+        unplaced,
+        assembly_domain=assembly_domain,
+        selected_tale_id=st.session_state.get("genome_org_selected_tale_id"),
     )
-    table_height = min(700, max(140, 35 * (len(unplaced) + 1)))
-    st.dataframe(unplaced, use_container_width=True, height=table_height)
+
+    chart = (
+        alt.Chart(unplaced)
+        .mark_image(aspect=False, height=BOX_HEIGHT)
+        .encode(
+            x=alt.X("start_plot:Q", scale=alt.Scale(domain=assembly_domain), axis=None),
+            x2="end_plot:Q",
+            y=alt.Y("lane:N", title=None, sort=lane_order, axis=alt.Axis(labels=False, ticks=False, domain=False)),
+            detail=alt.Detail("tale_id:N"),
+            url=alt.Url("box_svg:N"),
+            tooltip=[
+                alt.Tooltip("tale_id:Q", title="TALE ID", format=".0f"),
+                alt.Tooltip("plot_number:Q", title="plot TALE number", format=".0f"),
+                alt.Tooltip("tale_name:N", title="TALE"),
+                alt.Tooltip("family:N", title="Family"),
+                alt.Tooltip("dna_len:Q", title="DNA length", format=",.0f"),
+                alt.Tooltip("protein_len:Q", title="Protein aa", format=",.0f"),
+                alt.Tooltip("pseudo_label:N", title="Pseudo"),
+                alt.Tooltip("assembly_label:N", title="Assembly"),
+            ],
+        )
+        .add_params(
+            alt.selection_point(
+                fields=["tale_id"],
+                on="click",
+                clear=False,
+                empty=False,
+                name="selected_unplaced_tale",
+            )
+        )
+    )
+
+    event = st.vega_lite_chart(
+        chart.properties(height=max(120, 42 * len(lane_order))).to_dict(),
+        use_container_width=True,
+        theme="streamlit",
+        on_select="rerun",
+        key="genome_org_unplaced_chart",
+    )
+    clicked_tale_id = extract_selected_id(event)
+    if clicked_tale_id is not None and (
+        st.session_state.get("genome_org_selected_tale_id") != clicked_tale_id
+    ):
+        st.session_state["genome_org_selected_tale_id"] = clicked_tale_id
+        st.session_state["genome_org_query_select_focus_assembly"] = False
+        rerun_page()
+
+    st.markdown(
+        (
+            "<p style='color: var(--text-color-secondary, #6b7280); font-size: 0.875rem;'>"
+            "Each box is one TALE, and the in-box label matches the plot TALE number. "
+            "Box width follows DNA length. Click a box to select it."
+            "</p>"
+        ),
+        unsafe_allow_html=True,
+    )
+    render_selected_tale_from_rows(selected_tale_rows)
+    st.subheader("TALE Labels")
+    render_unplaced_label_table(unplaced)
 
 
 def render_selection_summary(
@@ -1073,8 +1247,6 @@ def render_plot_section(
         unsafe_allow_html=True,
     )
 
-    render_selected_tale_from_rows(selected_tale_rows)
-
     if compress_gaps and not collapsed_intervals.empty:
         with st.expander("Collapsed regions", expanded=False):
             table_height = min(320, max(120, 35 * (len(collapsed_intervals) + 1)))
@@ -1090,6 +1262,8 @@ def render_plot_section(
                 use_container_width=True,
                 height=table_height,
             )
+
+    render_selected_tale_from_rows(selected_tale_rows)
 
     st.subheader("TALE Labels")
     render_label_table(plot_df)
@@ -1137,7 +1311,6 @@ if plot_df.empty:
         st.info("No TALEs match the current filters.")
         st.stop()
     st.info("This sample has TALEs, but none with genomic coordinates for the current filters.")
-    render_selected_tale_from_rows(selected_tale_rows)
 else:
     render_plot_section(
         plot_df,
@@ -1147,7 +1320,7 @@ else:
     )
 
 if not unplaced_tales.empty:
-    render_unplaced_table(unplaced_tales)
+    render_unplaced_tales(unplaced_tales, selected_tale_rows)
 
 sync_genome_org_url(
     selected_sample_id,
