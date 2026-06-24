@@ -11,6 +11,7 @@ from utils.fasta_export import (
     tale_download_header,
 )
 from utils.page import init_page
+from utils.taxonomy import resolved_taxon_labels
 from utils.theme import blue_card_dark_mode_css
 
 init_page("TALE Detail", "TALE Detail", track_analytics=False)
@@ -24,38 +25,8 @@ def to_int(value: str | None) -> int | None:
     return int(cleaned) if cleaned.isdigit() else None
 
 
-def taxonomy_label(row: pd.Series) -> str:
-    species = coalesce_text(row.get("species"), default="")
-    pathovar = coalesce_text(row.get("pathovar"), default="")
-    if species:
-        return f"{species} pv. {pathovar}" if pathovar else species
-    return coalesce_text(row.get("taxon_name"))
-
-
 def strand_label(value) -> str:
     return {1: "+", -1: "-"}.get(value, "?")
-
-
-def ncbi_nuccore_url(accession: str) -> str:
-    return f"https://www.ncbi.nlm.nih.gov/nuccore/{accession}"
-
-
-def ncbi_assembly_url(accession: str) -> str:
-    return f"https://www.ncbi.nlm.nih.gov/assembly/{accession}"
-
-
-def ncbi_accession_url(accession: str, accession_type: object) -> str:
-    if str(accession_type or "").strip().lower() == "assembly":
-        return ncbi_assembly_url(accession)
-    return ncbi_nuccore_url(accession)
-
-
-def ncbi_biosample_url(biosample_id: str) -> str:
-    return f"https://www.ncbi.nlm.nih.gov/biosample/{biosample_id}"
-
-
-def ncbi_taxonomy_url(tax_id: int) -> str:
-    return f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id={tax_id}"
 
 
 def sequence_composition(sequence: str, alphabet: list[str]) -> pd.DataFrame:
@@ -222,9 +193,8 @@ protein_seq = coalesce_text(row.get("protein_seq"), default="")
 family_name = coalesce_text(row.get("family"))
 sample_name = coalesce_text(row.get("strain_name"), row.get("legacy_strain_name"))
 assembly_accession = coalesce_text(row.get("accession"))
-assembly_accession_type = row.get("accession_type")
 replicon_type = coalesce_text(row.get("replicon_type"))
-taxonomy_name = taxonomy_label(row)
+taxonomy_name = resolved_taxon_labels(detail, include_pathovar=True).iloc[0]
 current_strand = strand_label(row.get("strand"))
 assembly_suffix = (
     f" ({replicon_type})"
@@ -260,10 +230,18 @@ st.markdown(
 
 rvds = load_tale_rvds(selected_tale_id)
 
-nav_col1, nav_col2 = st.columns(2)
-if nav_col1.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
+nav_col1, nav_col2, nav_col3 = st.columns(3)
+sample_id = row.get("sample_id")
+if nav_col1.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_id'])}", use_container_width=True):
     selected_id = int(row["tale_id"])
-    sample_id = row.get("sample_id")
+    st.session_state["selected_tale_id"] = selected_id
+    st.session_state["family_selected_tale_control"] = selected_id
+    st.query_params.clear()
+    st.query_params["family"] = str(family_name)
+    if hasattr(st, "switch_page"):
+        st.switch_page("pages/06_TALE_Families.py")
+if nav_col2.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
+    selected_id = int(row["tale_id"])
     species_display = coalesce_text(row.get("species"))
     pathovar_display = coalesce_text(row.get("pathovar"))
     if pd.notna(sample_id):
@@ -291,60 +269,14 @@ if nav_col1.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row[
         st.query_params["sample_id"] = str(int(sample_id))
     st.query_params["tale_id"] = str(selected_id)
     if hasattr(st, "switch_page"):
-        st.switch_page("pages/05_Genome_Organization.py")
-if nav_col2.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_id'])}", use_container_width=True):
-    selected_id = int(row["tale_id"])
-    st.session_state["selected_tale_id"] = selected_id
-    st.session_state["family_selected_tale_control"] = selected_id
-    st.query_params.clear()
-    st.query_params["family"] = str(family_name)
-    if hasattr(st, "switch_page"):
-        st.switch_page("pages/03_TALE_Families.py")
-
-st.subheader("Links")
-link_cols = st.columns(3)
-with link_cols[0]:
-    st.markdown(
-        f"""
-        <div class="link-card">
-            <strong>Assembly</strong>
-            <span>{assembly_accession if assembly_accession != "Unknown" else 'No accession available'}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if assembly_accession != "Unknown":
-        st.link_button(
-            "Open NCBI accession",
-            ncbi_accession_url(assembly_accession, assembly_accession_type),
-            use_container_width=True,
-        )
-with link_cols[1]:
-    biosample_id = coalesce_text(row.get("biosample_id"))
-    st.markdown(
-        f"""
-        <div class="link-card">
-            <strong>BioSample</strong>
-            <span>{biosample_id}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if biosample_id != "Unknown":
-        st.link_button("Open NCBI BioSample", ncbi_biosample_url(biosample_id), use_container_width=True)
-with link_cols[2]:
-    ncbi_tax_id = row.get("ncbi_tax_id")
-    st.markdown(
-        f"""
-        <div class="link-card">
-            <strong>Taxonomy</strong>
-            <span>{taxonomy_name}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if pd.notna(ncbi_tax_id):
-        st.link_button("Open NCBI Taxonomy", ncbi_taxonomy_url(int(ncbi_tax_id)), use_container_width=True)
+        st.switch_page("pages/04_Genome_Organization.py")
+if nav_col3.button("🧾 Open Sample Page", key=f"to_sample_{int(row['tale_id'])}", use_container_width=True):
+    if pd.notna(sample_id):
+        st.session_state["sample_page_pending_sample_id"] = int(sample_id)
+        st.query_params.clear()
+        st.query_params["sample_id"] = str(int(sample_id))
+        if hasattr(st, "switch_page"):
+            st.switch_page("pages/03_Sample.py")
 
 overview_left, overview_right = st.columns([1.1, 1])
 with overview_left:

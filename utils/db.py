@@ -191,6 +191,49 @@ def load_sample_taxonomy() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def load_sample_detail(sample_id: int) -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT s.id AS sample_id,
+               s.biosample_id,
+               s.strain_name,
+               s.legacy_strain_name,
+               s.geo_tag,
+               s.collection_date,
+               tx.raw_name AS taxon_name,
+               tx.rank AS taxonomy_rank,
+               tx.species,
+               tx.pathovar,
+               tx.ncbi_tax_id
+        FROM samples s
+        LEFT JOIN taxonomy tx ON tx.id = s.taxon_id
+        WHERE s.id = ?
+        """,
+        params=[int(sample_id)],
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_sample_assemblies(sample_id: int) -> pd.DataFrame:
+    return query_df(
+        """
+        SELECT a.id AS assembly_id,
+               a.accession,
+               a.version,
+               a.accession_type,
+               a.replicon_type,
+               COUNT(t.id) AS tale_count
+        FROM assembly a
+        LEFT JOIN tale t ON t.assembly_id = a.id
+        WHERE a.sample_id = ?
+        GROUP BY a.id, a.accession, a.version, a.accession_type, a.replicon_type
+        ORDER BY a.accession, a.id
+        """,
+        params=[int(sample_id)],
+    )
+
+
+@st.cache_data(show_spinner=False)
 def load_crosstab_source() -> pd.DataFrame:
     return query_df(
         """
@@ -405,7 +448,6 @@ def load_tale_detail(tale_id: int) -> pd.DataFrame:
                s.strain_name,
                s.geo_tag,
                s.collection_date,
-               tx.id AS taxonomy_id,
                tx.ncbi_tax_id,
                tx.rank AS taxonomy_rank,
                tx.raw_name AS taxon_name,

@@ -18,10 +18,11 @@ APP_TITLE = "AnnoTALE DB Explorer"
 SIDEBAR_PAGES = [
     ("Home", "Home", "pages/00_Home.py"),
     ("DB Overview", "DB Overview", "pages/01_DB_Overview.py"),
-    ("Sample Map", "Sample Map", "pages/04_Sample_Map.py"),
-    ("Genome Organization", "Genome Organization", "pages/05_Genome_Organization.py"),
-    ("TALE Detail", "TALE Detail", "pages/06_TALE_Detail.py"),
-    ("TALE Families", "TALE Families", "pages/03_TALE_Families.py"),
+    ("Sample Map", "Sample Map", "pages/02_Sample_Map.py"),
+    ("Sample", "Sample", "pages/03_Sample.py"),
+    ("Genome Organization", "Genome Organization", "pages/04_Genome_Organization.py"),
+    ("TALE Detail", "TALE Detail", "pages/05_TALE_Detail.py"),
+    ("TALE Families", "TALE Families", "pages/06_TALE_Families.py"),
     ("TALE Family Analysis", "TALE Family Analysis", "pages/07_TALE_Family_Analysis.py"),
 ]
 

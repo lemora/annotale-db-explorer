@@ -728,7 +728,18 @@ def render_sample_navigation_card(
             ),
         )
         sync_sample_map_url(int(selected_sample_id))
-        if st.button(
+        button_col1, button_col2 = st.columns(2)
+        if button_col1.button(
+            "🧾 Open Sample Page",
+            key=f"sample_map_open_sample_{selected_country}",
+            use_container_width=True,
+        ):
+                st.session_state["sample_page_pending_sample_id"] = int(selected_sample_id)
+                st.query_params.clear()
+                st.query_params["sample_id"] = str(int(selected_sample_id))
+                if hasattr(st, "switch_page"):
+                    st.switch_page("pages/03_Sample.py")
+        if button_col2.button(
             "🧬 Open Sample in Genome Organization",
             key=f"sample_map_open_genome_{selected_country}",
             use_container_width=True,
@@ -740,7 +751,7 @@ def render_sample_navigation_card(
             st.session_state.pop("genome_org_assemblies", None)
             st.session_state["genome_org_previous_scope"] = None
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/05_Genome_Organization.py")
+                st.switch_page("pages/04_Genome_Organization.py")
 
 
 previous_page = st.session_state.get("active_page")

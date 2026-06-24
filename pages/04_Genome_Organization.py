@@ -483,7 +483,7 @@ def select_sample(scope_samples: pd.DataFrame) -> tuple[int, pd.Series]:
     initialize_widget_state("genome_org_sample_id", sample_options, fallback)
 
     selected_sample_id = st.selectbox(
-        "Sample / Strain",
+        "Strain / BioSample ID",
         sample_options,
         key="genome_org_sample_id",
         format_func=lambda sample_id: sample_option_label(
@@ -989,7 +989,7 @@ def render_selected_tale(selected_row: pd.Series) -> None:
         st.session_state["tale_detail_last_query_id"] = selected_id
         st.query_params["tale_id"] = str(selected_id)
         if hasattr(st, "switch_page"):
-            st.switch_page("pages/06_TALE_Detail.py")
+            st.switch_page("pages/05_TALE_Detail.py")
 
 
 def render_label_table(plot_df: pd.DataFrame) -> None:
@@ -1152,9 +1152,24 @@ def render_selection_summary(
         sort_columns=["assembly_label", "start_pos", "end_pos", "tale_id"],
     )
     file_name = f"annotale_tales_{slugify_filename_part(sample_name)}_strain_genomic.fasta"
-    action_col1, action_col2, _ = st.columns([1.5, 2.2, 5.3], gap="small")
+    action_col1, action_col2 = st.columns(2, gap="small")
     with action_col1:
-        if st.button("📍 Open Strain in Sample Map", key=f"to_sample_map_{int(selected_sample_row['id'])}"):
+        if st.button(
+            "🧾 Open Sample Page",
+            key=f"to_sample_page_{int(selected_sample_row['id'])}",
+            use_container_width=True,
+        ):
+            st.session_state["sample_page_pending_sample_id"] = int(selected_sample_row["id"])
+            st.query_params.clear()
+            st.query_params["sample_id"] = str(int(selected_sample_row["id"]))
+            if hasattr(st, "switch_page"):
+                st.switch_page("pages/03_Sample.py")
+    with action_col2:
+        if st.button(
+            "📍 Open in Sample Map",
+            key=f"to_sample_map_{int(selected_sample_row['id'])}",
+            use_container_width=True,
+        ):
             target_country = map_country_from_geo_tag(selected_sample_row.get("geo_tag"))
             target_taxon = sample_map_species_pathovar_label(
                 selected_species,
@@ -1164,8 +1179,9 @@ def render_selection_summary(
             st.session_state["sample_map_pending_taxon"] = target_taxon
             st.session_state["sample_map_pending_sample_id"] = int(selected_sample_row["id"])
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/04_Sample_Map.py")
-    with action_col2:
+                st.switch_page("pages/02_Sample_Map.py")
+    download_col, _ = st.columns([2.4, 7.6], gap="small")
+    with download_col:
         st.download_button(
             "📥 Download Strain TALEs as Genomic FASTA",
             data=fasta_payload,
@@ -1173,6 +1189,7 @@ def render_selection_summary(
             mime="text/plain",
             disabled=not bool(fasta_payload),
             help="Downloads all TALE genomic DNA sequences for the selected strain.",
+            use_container_width=True,
         )
 
 
