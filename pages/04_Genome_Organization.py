@@ -979,17 +979,36 @@ def render_selected_tale(selected_row: pd.Series) -> None:
         """,
         unsafe_allow_html=True,
     )
-    if st.button(
-        "🔎 Open TALE Detail",
-        key=f"open_tale_detail_{int(selected_row['tale_id'])}",
-        use_container_width=True,
-    ):
-        selected_id = int(selected_row["tale_id"])
-        st.session_state["tale_detail_id"] = selected_id
-        st.session_state["tale_detail_last_query_id"] = selected_id
-        st.query_params["tale_id"] = str(selected_id)
-        if hasattr(st, "switch_page"):
-            st.switch_page("pages/05_TALE_Detail.py")
+    detail_col, family_col = st.columns(2, gap="small")
+    with detail_col:
+        if st.button(
+            "🔎 Open TALE Detail",
+            key=f"open_tale_detail_{int(selected_row['tale_id'])}",
+            use_container_width=True,
+        ):
+            selected_id = int(selected_row["tale_id"])
+            st.session_state["tale_detail_id"] = selected_id
+            st.session_state["tale_detail_last_query_id"] = selected_id
+            st.query_params["tale_id"] = str(selected_id)
+            if hasattr(st, "switch_page"):
+                st.switch_page("pages/05_TALE_Detail.py")
+    with family_col:
+        if st.button(
+            "🌳 Open in TALE Families",
+            key=f"open_tale_family_{int(selected_row['tale_id'])}",
+            use_container_width=True,
+        ):
+            selected_id = int(selected_row["tale_id"])
+            family_name = str(selected_row["family"] or "").strip()
+            st.session_state["selected_tale_id"] = selected_id
+            st.session_state["family_pending_family_control"] = family_name or None
+            st.session_state["family_pending_tale_control"] = selected_id
+            st.query_params.clear()
+            if family_name:
+                st.query_params["family"] = family_name
+            st.query_params["tale_id"] = str(selected_id)
+            if hasattr(st, "switch_page"):
+                st.switch_page("pages/06_TALE_Families.py")
 
 
 def render_label_table(plot_df: pd.DataFrame) -> None:
@@ -1136,12 +1155,10 @@ def render_unplaced_tales(
     render_unplaced_label_table(unplaced)
 
 
-def render_selection_summary(
-    selected_species: str,
-    selected_pathovar: str,
+def strain_download_payload(
     selected_sample_row: pd.Series,
     tales: pd.DataFrame,
-) -> None:
+) -> tuple[str, str]:
     sample_name = str(selected_sample_row.get("strain_name") or "").strip()
     if not sample_name or sample_name.lower() == "nan":
         sample_name = str(selected_sample_row.get("legacy_strain_name") or "").strip()
@@ -1152,6 +1169,14 @@ def render_selection_summary(
         sort_columns=["assembly_label", "start_pos", "end_pos", "tale_id"],
     )
     file_name = f"annotale_tales_{slugify_filename_part(sample_name)}_strain_genomic.fasta"
+    return fasta_payload, file_name
+
+
+def render_selection_summary(
+    selected_species: str,
+    selected_pathovar: str,
+    selected_sample_row: pd.Series,
+) -> None:
     action_col1, action_col2 = st.columns(2, gap="small")
     with action_col1:
         if st.button(
@@ -1180,17 +1205,23 @@ def render_selection_summary(
             st.session_state["sample_map_pending_sample_id"] = int(selected_sample_row["id"])
             if hasattr(st, "switch_page"):
                 st.switch_page("pages/02_Sample_Map.py")
-    download_col, _ = st.columns([2.4, 7.6], gap="small")
-    with download_col:
-        st.download_button(
-            "📥 Download Strain TALEs as Genomic FASTA",
-            data=fasta_payload,
-            file_name=file_name,
-            mime="text/plain",
-            disabled=not bool(fasta_payload),
-            help="Downloads all TALE genomic DNA sequences for the selected strain.",
-            use_container_width=True,
-        )
+
+
+def render_bottom_download(
+    selected_sample_row: pd.Series,
+    tales: pd.DataFrame,
+) -> None:
+    fasta_payload, file_name = strain_download_payload(selected_sample_row, tales)
+    st.markdown("---")
+    st.download_button(
+        "📥 Download Strain TALEs as Genomic FASTA",
+        data=fasta_payload,
+        file_name=file_name,
+        mime="text/plain",
+        disabled=not bool(fasta_payload),
+        help="Downloads all TALE genomic DNA sequences for the selected strain.",
+        use_container_width=True,
+    )
 
 
 def render_selected_tale_from_rows(rows: pd.DataFrame) -> None:
@@ -1310,7 +1341,7 @@ if tales.empty:
 
 available_assemblies = tales["assembly_label"].drop_duplicates().tolist()
 selected_assemblies = initialize_assembly_filter(selected_sample_id, available_assemblies)
-render_selection_summary(selected_species, selected_pathovar, selected_sample_row, tales)
+render_selection_summary(selected_species, selected_pathovar, selected_sample_row)
 compress_gaps = st.checkbox("Compress empty genome regions", value=True)
 
 plot_df, collapsed_intervals, unplaced_tales = build_plot_data(
@@ -1338,6 +1369,8 @@ else:
 
 if not unplaced_tales.empty:
     render_unplaced_tales(unplaced_tales, selected_tale_rows)
+
+render_bottom_download(selected_sample_row, tales)
 
 sync_genome_org_url(
     selected_sample_id,
