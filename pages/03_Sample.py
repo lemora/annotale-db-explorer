@@ -53,7 +53,7 @@ def ncbi_accession_url(accession: str, accession_type: object) -> str:
 
 
 def missing_value_label(value: str, label: str) -> str:
-    return value if value != "Unknown" else f"No {label} available"
+    return value if value != "Unknown" else "-"
 
 
 def assembly_option_label(row: pd.Series) -> str:
@@ -77,7 +77,16 @@ def split_species_pathovar(label: str) -> tuple[str, str]:
 
 
 def sample_option_label(row: pd.Series) -> str:
-    return str(row["sample_display"])
+    strain_name = str(row.get("strain_name") or "").strip()
+    if not strain_name or strain_name.lower() == "nan":
+        strain_name = str(row.get("legacy_strain_name") or "").strip()
+    if not strain_name or strain_name.lower() == "nan":
+        strain_name = "unknown strain"
+
+    biosample_id = str(row.get("biosample_id") or "").strip()
+    if biosample_id and biosample_id.lower() != "nan":
+        return f"{strain_name} | {biosample_id}"
+    return f"{strain_name} | unknown biosample id"
 
 
 def load_sample_selector_rows() -> pd.DataFrame:
@@ -91,6 +100,11 @@ def load_sample_selector_rows() -> pd.DataFrame:
     rows["species_display"] = split_values.str[0]
     rows["pathovar_display"] = split_values.str[1]
     return rows.sort_values(["sample_id"]).reset_index(drop=True)
+
+
+def initialize_widget_state(key: str, options: list[str] | list[int], fallback) -> None:
+    if st.session_state.get(key) not in options:
+        st.session_state[key] = fallback
 
 
 def sync_sample_url(sample_id: int) -> None:
@@ -216,33 +230,30 @@ elif (
 
 selected_sample_id = int(st.session_state["sample_page_sample_id"])
 selected_row = selector_rows[selector_rows["sample_id"] == selected_sample_id].iloc[0]
-species_options = selector_rows["species_display"].drop_duplicates().tolist()
-if selected_row["species_display"] not in species_options:
-    species_options = [selected_row["species_display"]] + species_options
-if st.session_state.get("sample_page_species") not in species_options:
-    st.session_state["sample_page_species"] = selected_row["species_display"]
+species_options = sorted(selector_rows["species_display"].drop_duplicates().tolist())
+initialize_widget_state(
+    "sample_page_species", species_options, selected_row["species_display"]
+)
 selected_species = st.selectbox("Species", species_options, key="sample_page_species")
 
 species_scope = selector_rows[selector_rows["species_display"] == selected_species].copy()
-pathovar_options = species_scope["pathovar_display"].drop_duplicates().tolist()
+pathovar_options = sorted(species_scope["pathovar_display"].drop_duplicates().tolist())
 default_pathovar = (
     selected_row["pathovar_display"]
     if selected_row["species_display"] == selected_species and selected_row["pathovar_display"] in pathovar_options
     else pathovar_options[0]
 )
-if st.session_state.get("sample_page_pathovar") not in pathovar_options:
-    st.session_state["sample_page_pathovar"] = default_pathovar
+initialize_widget_state("sample_page_pathovar", pathovar_options, default_pathovar)
 selected_pathovar = st.selectbox("Pathovar", pathovar_options, key="sample_page_pathovar")
 
 sample_scope = species_scope[species_scope["pathovar_display"] == selected_pathovar].copy()
 sample_scope = sample_scope.sort_values(["sample_display", "sample_id"]).reset_index(drop=True)
 sample_options = sample_scope["sample_id"].tolist()
 default_sample_id = selected_sample_id if selected_sample_id in sample_options else sample_options[0]
-if st.session_state.get("sample_page_sample_id") not in sample_options:
-    st.session_state["sample_page_sample_id"] = default_sample_id
+initialize_widget_state("sample_page_sample_id", sample_options, default_sample_id)
 selected_sample_id = int(
     st.selectbox(
-        "Sample",
+        "Strain / BioSample ID",
         sample_options,
         key="sample_page_sample_id",
         format_func=lambda sample_id: sample_option_label(
@@ -285,7 +296,7 @@ st.markdown(
         <div class="sample-meta"><span class="sample-meta-label">Taxonomy level</span>{missing_value_label(taxonomy_level, 'taxonomy level')}</div>
         <div class="sample-meta"><span class="sample-meta-label">BioSample</span>{missing_value_label(coalesce_text(row.get('biosample_id')), 'BioSample')}</div>
         <div class="sample-meta"><span class="sample-meta-label">Location</span>{missing_value_label(coalesce_text(row.get('geo_tag')), 'location')}</div>
-        <div class="sample-meta"><span class="sample-meta-label">Collection</span>{missing_value_label(coalesce_text(row.get('collection_date')), 'collection date')}</div>
+        <div class="sample-meta"><span class="sample-meta-label">Collection date</span>{missing_value_label(coalesce_text(row.get('collection_date')), 'collection date')}</div>
     </div>
     """,
     unsafe_allow_html=True,

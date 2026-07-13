@@ -237,6 +237,13 @@ def assembly_label_from_parts(assembly_id, accession, replicon_type) -> str:
     return f"assembly {int(assembly_id)}{suffix}"
 
 
+def assembly_sort_rank(replicon_type: object) -> int:
+    replicon_text = str(replicon_type or "").strip().lower()
+    if "chromosome" in replicon_text:
+        return 0
+    return 1
+
+
 def sample_option_label(row: pd.Series) -> str:
     strain_name = str(row["strain_name"] or "").strip()
     if not strain_name or strain_name.lower() == "nan":
@@ -607,6 +614,7 @@ def prepare_tales(sample_id: int) -> pd.DataFrame:
     tales["family"] = tales["family"].fillna("Unassigned")
     tales["replicon_type"] = tales["replicon_type"].fillna("unknown")
     tales["accession"] = tales["accession"].fillna("unknown")
+    tales["assembly_sort_rank"] = tales["replicon_type"].apply(assembly_sort_rank)
     tales["assembly_label"] = tales.apply(
         lambda row: assembly_label_from_parts(
             row["assembly_id"], row["accession"], row["replicon_type"]
@@ -639,7 +647,7 @@ def prepare_plot_tales(
 
     filtered = filtered.drop_duplicates(subset=["tale_id"]).copy()
     filtered = filtered.sort_values(
-        ["assembly_label", "start_pos", "end_pos", "tale_id"]
+        ["assembly_sort_rank", "assembly_label", "start_pos", "end_pos", "tale_id"]
     ).reset_index(drop=True)
     filtered["plot_number"] = filtered.index + 1
     filtered["plot_number_label"] = filtered["plot_number"].astype(str)
