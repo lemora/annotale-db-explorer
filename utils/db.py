@@ -19,7 +19,6 @@ from utils.tale_queries import (
     load_families,
     load_family_download_rows,
     load_family_members,
-    load_family_rvd_counts,
     load_family_species_pathovar,
     load_family_tale_rows,
     load_strain_tales,

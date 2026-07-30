@@ -39,14 +39,16 @@ def _get_conn(fingerprint: tuple[int, int]) -> sqlite3.Connection:
                    MAX(CASE WHEN id = taxon_id THEN name END) AS raw_name,
                    MAX(CASE WHEN rank = 'genus' THEN name END) AS genus,
                    MAX(CASE WHEN rank = 'species' THEN name END) AS species_name,
+                   MAX(CASE WHEN rank = 'species group' THEN name END) AS species_group_name,
                    MAX(CASE WHEN rank = 'pathovar' THEN name END) AS pathovar
             FROM lineage
             GROUP BY taxon_id
         )
         SELECT id, ncbi_tax_id, rank, raw_name,
-               CASE WHEN species_name IS NULL THEN NULL
-                    WHEN genus IS NULL OR species_name LIKE genus || ' %' THEN species_name
-                    ELSE genus || ' ' || species_name END AS species,
+               CASE WHEN COALESCE(species_name, species_group_name) IS NULL THEN NULL
+                    WHEN genus IS NULL OR COALESCE(species_name, replace(species_group_name, ' group', '')) LIKE genus || ' %'
+                      THEN COALESCE(species_name, replace(species_group_name, ' group', ''))
+                    ELSE genus || ' ' || COALESCE(species_name, replace(species_group_name, ' group', '')) END AS species,
                pathovar
         FROM rollup
         """

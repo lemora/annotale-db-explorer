@@ -39,7 +39,7 @@ def ncbi_biosample_url(biosample_id: str) -> str:
 
 
 def ncbi_taxonomy_url(tax_id: int) -> str:
-    return f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id={tax_id}"
+    return f"https://www.ncbi.nlm.nih.gov/datasets/taxonomy/browser/?taxon={tax_id}"
 
 
 def ncbi_nuccore_url(accession: str) -> str:
@@ -85,6 +85,17 @@ def sync_sample_url(sample_id: int) -> None:
     st.query_params.clear()
     st.query_params["sample_id"] = str(int(sample_id))
     st.session_state["sample_page_last_query_id"] = int(sample_id)
+
+
+def set_selected_sample(selector_rows: pd.DataFrame, sample_id: int) -> None:
+    row = selector_rows[selector_rows["sample_id"] == int(sample_id)].iloc[0]
+    st.session_state["sample_page_sample_id"] = int(sample_id)
+    st.session_state["sample_page_species"] = row["species_display"]
+    st.session_state["sample_page_pathovar"] = row["pathovar_display"]
+
+
+def sync_sample_picker(selector_rows: pd.DataFrame) -> None:
+    set_selected_sample(selector_rows, st.session_state["sample_page_sample_id"])
 init_page("Sample", "Sample", track_analytics=False)
 st.title("Sample")
 
@@ -168,20 +179,14 @@ query_sample_id = to_int(st.query_params.get("sample_id"))
 sample_ids = selector_rows["sample_id"].tolist()
 
 if st.session_state.get("sample_page_sample_id") not in sample_ids:
-    st.session_state["sample_page_sample_id"] = int(selector_rows.iloc[0]["sample_id"])
+    set_selected_sample(selector_rows, int(selector_rows.iloc[0]["sample_id"]))
 if pending_sample_id in sample_ids:
-    st.session_state["sample_page_sample_id"] = int(pending_sample_id)
-    pending_row = selector_rows[selector_rows["sample_id"] == int(pending_sample_id)].iloc[0]
-    st.session_state["sample_page_species"] = pending_row["species_display"]
-    st.session_state["sample_page_pathovar"] = pending_row["pathovar_display"]
+    set_selected_sample(selector_rows, int(pending_sample_id))
 elif (
     query_sample_id in sample_ids
     and query_sample_id != st.session_state.get("sample_page_last_query_id")
 ):
-    st.session_state["sample_page_sample_id"] = int(query_sample_id)
-    query_row = selector_rows[selector_rows["sample_id"] == int(query_sample_id)].iloc[0]
-    st.session_state["sample_page_species"] = query_row["species_display"]
-    st.session_state["sample_page_pathovar"] = query_row["pathovar_display"]
+    set_selected_sample(selector_rows, int(query_sample_id))
 
 selected_sample_id = int(st.session_state["sample_page_sample_id"])
 selected_row = selector_rows[selector_rows["sample_id"] == selected_sample_id].iloc[0]
@@ -203,16 +208,21 @@ selected_pathovar = st.selectbox("Pathovar", pathovar_options, key="sample_page_
 
 sample_scope = species_scope[species_scope["pathovar_display"] == selected_pathovar].copy()
 sample_scope = sample_scope.sort_values(["sample_display", "sample_id"]).reset_index(drop=True)
-sample_options = sample_scope["sample_id"].tolist()
+search_all_samples = st.checkbox("Search all samples", key="sample_page_search_all")
+picker_rows = selector_rows if search_all_samples else sample_scope
+sample_options = picker_rows["sample_id"].tolist()
 default_sample_id = selected_sample_id if selected_sample_id in sample_options else sample_options[0]
-initialize_widget_state("sample_page_sample_id", sample_options, default_sample_id)
+if st.session_state.get("sample_page_sample_id") not in sample_options:
+    st.session_state["sample_page_sample_id"] = default_sample_id
 selected_sample_id = int(
     st.selectbox(
         "Strain / BioSample ID",
         sample_options,
         key="sample_page_sample_id",
+        on_change=sync_sample_picker,
+        args=(selector_rows,),
         format_func=lambda sample_id: sample_option_label(
-            sample_scope.loc[sample_scope["sample_id"] == sample_id].iloc[0]
+            picker_rows.loc[picker_rows["sample_id"] == sample_id].iloc[0]
         ),
     )
 )
@@ -227,7 +237,11 @@ track_page_visit()
 
 row = detail.iloc[0]
 sample_name = sample_title(row)
-taxonomy_name = resolved_taxon_labels(detail, include_pathovar=True).iloc[0]
+taxonomy_filter_name = resolved_taxon_labels(detail, include_pathovar=True).iloc[0]
+taxonomy_name = coalesce_text(row.get("species"), row.get("taxon_name"))
+pathovar_name = coalesce_text(row.get("pathovar"))
+if taxonomy_name != "Unknown" and pathovar_name != "Unknown":
+    taxonomy_name = f"{taxonomy_name} pv. {pathovar_name}"
 taxonomy_level = coalesce_text(row.get("taxonomy_rank"))
 assemblies = load_sample_assemblies(selected_sample_id)
 tales = load_strain_tales(selected_sample_id)
@@ -262,7 +276,7 @@ if nav_col1.button("📍 Open in Sample Map", use_container_width=True):
     st.session_state["sample_map_pending_country"] = country_or_unknown(
         row.get("geo_tag")
     )
-    st.session_state["sample_map_pending_taxon"] = taxonomy_name
+    st.session_state["sample_map_pending_taxon"] = taxonomy_filter_name
     st.session_state["sample_map_pending_sample_id"] = int(row["sample_id"])
     st.query_params.clear()
     st.query_params["sample_id"] = str(int(row["sample_id"]))
