@@ -255,7 +255,11 @@ def sample_option_label(row: pd.Series) -> str:
 
 
 def sample_map_species_pathovar_label(selected_species: str, selected_pathovar: str) -> str:
-    label = selected_species if selected_pathovar == "Unknown" else f"{selected_species} {selected_pathovar}"
+    label = (
+        selected_species
+        if selected_pathovar == "Unknown"
+        else f"{selected_species} pv. {selected_pathovar}"
+    )
     return abbreviate_taxon_labels(pd.Series([label])).iloc[0]
 
 

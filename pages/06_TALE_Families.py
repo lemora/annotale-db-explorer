@@ -1,5 +1,6 @@
 import altair as alt
 import html
+import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -10,20 +11,21 @@ from utils.tale_queries import (
     load_family_members,
     load_family_species_pathovar,
     load_family_tale_rows,
+    load_tale_detail,
+    load_tale_options,
     load_tales,
 )
 from utils.fasta_export import (
     build_multi_fasta,
+    coalesce_text,
     slugify_filename_part,
 )
 from utils.family_alignment import aligned_rvd_counts, aligned_rvds
+from utils.tale_helpers import tale_selector_labels
 from utils.analytics import track_page_visit
-from utils.page import init_page
+from utils.page import init_page, open_genome_organization
 from utils.theme import PSEUDO_TALE_GREY, SELECTED_ACCENT
-from utils.taxonomy import (
-    abbreviate_taxon_labels,
-    resolved_taxon_labels,
-)
+from utils.taxonomy import abbreviate_taxon_labels, resolved_taxon_labels
 from utils.tree import layout_tree, try_parse_newick
 
 init_page("TALE Families", "TALE Families", track_analytics=False)
@@ -35,7 +37,7 @@ Y_SPACING = 14.0
 TREE_MIN_HEIGHT = 520
 RVD_CHART_HEIGHT = 300
 SELECTED_RVD_HEIGHT = 110
-SP_CHART_HEIGHT = 150
+SP_CHART_HEIGHT = 200
 
 
 def rerun_page() -> None:
@@ -224,22 +226,30 @@ def build_edge_points(nodes_df, edges_df, selected_id: int | None) -> list[dict]
 
 
 def render_tale_table(tale_rows, selected_id: int | None) -> None:
+    taxonomy_labels = abbreviate_taxon_labels(
+        resolved_taxon_labels(tale_rows, include_pathovar=True)
+    )
     rows_html = []
-    for _, row in tale_rows.iterrows():
+    for (_, row), taxonomy_label in zip(tale_rows.iterrows(), taxonomy_labels):
         rid = int(row["id"])
-        rname = html.escape(row["name"] or "")
+        tale_label = str(rid)
+        sample_label = html.escape(
+            coalesce_text(row.get("strain_name"), row.get("legacy_strain_name"))
+        )
+        taxonomy_label = html.escape(taxonomy_label)
         selected_class = " selected" if selected_id == rid else ""
         rep_len = row["repeat_len"]
         rep_len_display = f"{int(rep_len)}" if rep_len == rep_len else ""
         rows_html.append(
             f"<tr class='row{selected_class}' data-id='{rid}'>"
-            f"<td>{rid}</td><td>{rname}</td><td>{rep_len_display}</td></tr>"
+            f"<td>{tale_label}</td><td>{taxonomy_label}</td><td>{sample_label}</td>"
+            f"<td>{rep_len_display}</td></tr>"
         )
 
     table_html = f"""
     <div id='tale-table-wrapper'>
       <table id='tale-table'>
-        <thead><tr><th>ID</th><th>Name</th><th>Repeat Length</th></tr></thead>
+        <thead><tr><th>TALE ID</th><th>Taxonomy</th><th>Sample</th><th>Repeat Length</th></tr></thead>
         <tbody>
           {''.join(rows_html)}
         </tbody>
@@ -411,7 +421,7 @@ def render_selection_controls(
     current_family_name: str,
     selected_id: int | None,
     all_tale_options: list[int],
-    tale_name_by_id: dict[int, str],
+    tale_label_by_id: dict[int, str],
     family_options: list[str],
     family_sizes: dict[str, int],
 ) -> str:
@@ -423,7 +433,7 @@ def render_selection_controls(
             "Select a TALE:",
             all_tale_options,
             index=selected_tale_index,
-            format_func=lambda tale_id: f"{tale_id}: {tale_name_by_id.get(tale_id, '')}",
+            format_func=lambda tale_id: tale_label_by_id[tale_id],
         )
         if selected_tale != selected_id:
             target_family_name = tale_to_family.get(int(selected_tale), current_family_name)
@@ -437,6 +447,16 @@ def render_selection_controls(
             st.query_params["tale_id"] = str(selected_detail_tale_id)
             if hasattr(st, "switch_page"):
                 st.switch_page("pages/05_TALE_Detail.py")
+        if st.button("🧬 Open in Genome Organization", use_container_width=True):
+            detail = load_tale_detail(selected_detail_tale_id)
+            detail_row = detail.iloc[0]
+            sample_id = detail_row.get("sample_id")
+            open_genome_organization(
+                selected_detail_tale_id,
+                int(sample_id) if pd.notna(sample_id) else None,
+                coalesce_text(detail_row.get("species")),
+                coalesce_text(detail_row.get("pathovar")),
+            )
 
     st.markdown("---")
 
@@ -473,6 +493,7 @@ def render_species_pathovar_panel(family_name: str) -> None:
     species_pathovar = resolved_taxon_labels(
         sp_raw,
         include_pathovar=True,
+        abbreviate=True,
     )
     sp_counts = (
         species_pathovar
@@ -480,9 +501,6 @@ def render_species_pathovar_panel(family_name: str) -> None:
         .rename_axis("species_pathovar")
         .reset_index(name="count")
         .sort_values("count", ascending=False)
-    )
-    sp_counts["species_pathovar"] = abbreviate_taxon_labels(
-        sp_counts["species_pathovar"]
     )
     sp_chart = (
         alt.Chart(sp_counts)
@@ -492,13 +510,15 @@ def render_species_pathovar_panel(family_name: str) -> None:
                 "species_pathovar:N",
                 sort="-x",
                 title="Species + Pathovar",
+                scale=alt.Scale(paddingInner=0.25, paddingOuter=0.15),
                 axis=alt.Axis(labelLimit=2000, labelOverlap=False),
             ),
             x=alt.X("count:Q", title="TALE count", axis=alt.Axis(format="d")),
             tooltip=["species_pathovar:N", "count:Q"],
         )
     )
-    st.altair_chart(sp_chart.properties(height=SP_CHART_HEIGHT), use_container_width=True)
+    chart_height = max(SP_CHART_HEIGHT, 36 * len(sp_counts))
+    st.altair_chart(sp_chart.properties(height=chart_height), use_container_width=True)
 
 families = load_families()
 families = families[families["tree_newick"].fillna("").str.strip() != ""]
@@ -529,7 +549,7 @@ tale_to_family = (
 
 if tales_df.empty:
     all_tale_options = []
-    tale_name_by_id = {}
+    tale_label_by_id = {}
 else:
     all_tale_rows = tales_df[["id", "name"]].copy()
     all_tale_rows["id"] = all_tale_rows["id"].astype(int)
@@ -537,7 +557,10 @@ else:
         all_tale_rows = all_tale_rows[all_tale_rows["id"].isin(family_members["tale_id"])]
     all_tale_rows = all_tale_rows.sort_values("id")
     all_tale_options = all_tale_rows["id"].tolist()
-    tale_name_by_id = dict(zip(all_tale_rows["id"], all_tale_rows["name"].fillna("")))
+    tale_selector_rows = load_tale_options()
+    tale_label_by_id = dict(
+        zip(tale_selector_rows["tale_id"], tale_selector_labels(tale_selector_rows))
+    )
 
 current_family_name, selected_id = resolve_selection_state(
     family_options,
@@ -551,7 +574,7 @@ with left:
         current_family_name,
         selected_id,
         all_tale_options,
-        tale_name_by_id,
+        tale_label_by_id,
         family_options,
         family_sizes,
     )

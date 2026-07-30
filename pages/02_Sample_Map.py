@@ -14,9 +14,7 @@ from utils.sample_helpers import (
     parse_country,
 )
 from utils.sample_queries import load_sample_map_source, load_sample_taxonomy
-from utils.taxonomy import (
-    resolved_taxon_labels,
-)
+from utils.taxonomy import abbreviate_taxon_labels
 
 COUNTRY_CENTROIDS = {
     "Argentina": (-38.4161, -63.6167),
@@ -115,12 +113,10 @@ def build_sample_map_base() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def build_taxonomy_labels(include_pathovar: bool) -> pd.DataFrame:
-    tax_raw = load_sample_taxonomy().copy()
-    tax_raw["species_pathovar"] = resolved_taxon_labels(
-        tax_raw,
-        include_pathovar=include_pathovar,
-        abbreviate=True,
-    )
+    tax_raw = add_species_pathovar_columns(load_sample_taxonomy())
+    if not include_pathovar:
+        tax_raw["species_pathovar"] = tax_raw["species_display"]
+    tax_raw["species_pathovar"] = abbreviate_taxon_labels(tax_raw["species_pathovar"])
     return tax_raw[["sample_id", "species_pathovar"]]
 
 
@@ -751,10 +747,3 @@ selected_country, selected_rows = handle_country_selection(
     mappable=mappable,
 )
 render_selection_panels(selected_rows, selected_country)
-
-with st.expander("Samples Without Location", expanded=False):
-    if missing_country.empty:
-        st.info("No samples missing location data.")
-    else:
-        missing_rows = missing_country[["sample_id", "strain_display"]]
-        st.dataframe(missing_rows, use_container_width=True, height=300)

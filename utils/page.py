@@ -23,7 +23,6 @@ SIDEBAR_PAGES = [
     ("Genome Organization", "Genome Organization", "pages/04_Genome_Organization.py"),
     ("TALE Detail", "TALE Detail", "pages/05_TALE_Detail.py"),
     ("TALE Families", "TALE Families", "pages/06_TALE_Families.py"),
-    ("TALE Family Analysis", "TALE Family Analysis", "pages/07_TALE_Family_Analysis.py"),
 ]
 
 
@@ -31,7 +30,7 @@ def db_unavailable_reason() -> str | None:
     if not DB_PATH.exists():
         return f"Database file is missing: `{DB_PATH}`"
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as conn:
             rows = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
             ).fetchall()
@@ -76,3 +75,38 @@ def init_page(
     st.session_state["active_page"] = active_page
     if track_analytics:
         track_page_visit()
+
+
+def open_genome_organization(
+    tale_id: int,
+    sample_id: int | None,
+    species: str,
+    pathovar: str,
+) -> None:
+    st.session_state["genome_org_last_seen_query_sample_id"] = None
+    st.session_state["genome_org_last_query_tale_id"] = None
+    st.session_state["genome_org_last_seen_query_tale_id"] = None
+    st.session_state["genome_org_selected_tale_id"] = tale_id
+    if sample_id is not None:
+        st.session_state["genome_org_sample_id"] = sample_id
+        st.session_state["genome_org_pending_sample_id"] = sample_id
+    if species != "Unknown":
+        st.session_state["genome_org_species"] = species
+    else:
+        st.session_state.pop("genome_org_species", None)
+    if pathovar != "Unknown":
+        st.session_state["genome_org_pathovar"] = pathovar
+    else:
+        st.session_state.pop("genome_org_pathovar", None)
+    st.session_state["genome_org_pending_tale_id"] = tale_id
+    st.session_state.pop("genome_org_pending_assembly", None)
+    st.session_state.pop("genome_org_target_assembly", None)
+    st.session_state.pop("genome_org_assemblies", None)
+    st.session_state["genome_org_query_select_focus_assembly"] = False
+    st.session_state["genome_org_previous_scope"] = None
+    st.query_params.clear()
+    if sample_id is not None:
+        st.query_params["sample_id"] = str(sample_id)
+    st.query_params["tale_id"] = str(tale_id)
+    if hasattr(st, "switch_page"):
+        st.switch_page("pages/04_Genome_Organization.py")

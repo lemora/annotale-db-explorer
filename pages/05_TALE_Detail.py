@@ -4,13 +4,14 @@ import streamlit as st
 
 from utils.analytics import track_page_visit
 from utils.tale_queries import load_tale_detail, load_tale_options, load_tale_rvds
+from utils.tale_helpers import tale_selector_labels
 from utils.fasta_export import (
     coalesce_text,
     fasta_text,
     stable_tale_download_file_stub,
     tale_download_header,
 )
-from utils.page import init_page
+from utils.page import init_page, open_genome_organization
 from utils.taxonomy import resolved_taxon_labels
 from utils.theme import blue_card_dark_mode_css
 
@@ -90,14 +91,16 @@ st.markdown(
         color: #182018;
         margin: 0 0 0.35rem 0;
     }
-    .tale-meta {
+    .tale-meta-list {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        column-gap: 1rem;
+        row-gap: 0.3rem;
         font-size: 0.98rem;
         color: #334033;
         margin: 0.15rem 0;
     }
     .tale-meta-label {
-        display: inline-block;
-        min-width: 5.5rem;
         font-weight: 700;
         color: #1f271c;
     }
@@ -138,7 +141,7 @@ st.markdown(
         title_selector=".tale-title",
         sub_selector=".tale-kicker",
         label_selector=".tale-meta-label",
-        text_selector=".tale-meta, .tale-meta-value",
+        text_selector=".tale-meta-list, .tale-meta-value",
         chip_selector=".tale-chip",
         link_card_selector=".link-card",
         link_title_selector=".link-card strong",
@@ -158,9 +161,7 @@ if tale_options.empty:
 tale_options = tale_options.copy()
 tale_options["tale_id"] = tale_options["tale_id"].astype(int)
 tale_ids = tale_options["tale_id"].tolist()
-tale_name_by_id = dict(
-    zip(tale_options["tale_id"], tale_options["tale_name"].fillna(""))
-)
+tale_label_by_id = dict(zip(tale_options["tale_id"], tale_selector_labels(tale_options)))
 
 selected_from_query = to_int(st.query_params.get("tale_id"))
 last_query_tale_id = st.session_state.get("tale_detail_last_query_id")
@@ -175,7 +176,7 @@ selected_tale_id = st.selectbox(
     "TALE",
     tale_ids,
     key="tale_detail_id",
-    format_func=lambda tale_id: f"{tale_id}: {tale_name_by_id.get(tale_id, '')}",
+    format_func=lambda tale_id: tale_label_by_id[tale_id],
 )
 selected_tale_id = int(selected_tale_id)
 st.query_params["tale_id"] = str(selected_tale_id)
@@ -215,10 +216,13 @@ st.markdown(
     <div class="tale-hero">
         <div class="tale-kicker">TALE Record</div>
         <div class="tale-title">{row["tale_name"]}</div>
-        <div class="tale-meta"><span class="tale-meta-label">TALE</span><span class="tale-meta-value">ID {int(row["tale_id"])} • Family {family_name} • Strand {current_strand}</span></div>
-        <div class="tale-meta"><span class="tale-meta-label">Sample</span><span class="tale-meta-value">{sample_name}</span></div>
-        <div class="tale-meta"><span class="tale-meta-label">Assembly</span><span class="tale-meta-value">{assembly_display}</span></div>
-        <div class="tale-meta"><span class="tale-meta-label">Taxonomy</span><span class="tale-meta-value">{taxonomy_name}</span></div>
+        <div class="tale-meta-list">
+            <span class="tale-meta-label">Legacy name</span><span class="tale-meta-value">{row["tale_name"]}</span>
+            <span class="tale-meta-label">TALE</span><span class="tale-meta-value">ID {int(row["tale_id"])} • Family {family_name} • Strand {current_strand}</span>
+            <span class="tale-meta-label">Sample</span><span class="tale-meta-value">{sample_name}</span>
+            <span class="tale-meta-label">Assembly</span><span class="tale-meta-value">{assembly_display}</span>
+            <span class="tale-meta-label">Taxonomy</span><span class="tale-meta-value">{taxonomy_name}</span>
+        </div>
         <div class="tale-chip-row">
             <span class="tale-chip">{'Pseudo' if int(row['is_pseudo'] or 0) == 1 else 'Non-pseudo'}</span>
             <span class="tale-chip">{replicon_type if replicon_type != "Unknown" else 'Replicon type unknown'}</span>
@@ -242,34 +246,12 @@ if nav_col1.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_
         st.switch_page("pages/06_TALE_Families.py")
 if nav_col2.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
     selected_id = int(row["tale_id"])
-    species_display = coalesce_text(row.get("species"))
-    pathovar_display = coalesce_text(row.get("pathovar"))
-    if pd.notna(sample_id):
-        st.session_state["genome_org_sample_id"] = int(sample_id)
-    if species_display != "Unknown":
-        st.session_state["genome_org_species"] = species_display
-    else:
-        st.session_state.pop("genome_org_species", None)
-    if pathovar_display != "Unknown":
-        st.session_state["genome_org_pathovar"] = pathovar_display
-    else:
-        st.session_state.pop("genome_org_pathovar", None)
-    st.session_state["genome_org_selected_tale_id"] = selected_id
-    st.session_state["genome_org_last_query_tale_id"] = None
-    if pd.notna(sample_id):
-        st.session_state["genome_org_pending_sample_id"] = int(sample_id)
-    st.session_state["genome_org_pending_tale_id"] = selected_id
-    st.session_state.pop("genome_org_pending_assembly", None)
-    st.session_state.pop("genome_org_target_assembly", None)
-    st.session_state.pop("genome_org_assemblies", None)
-    st.session_state["genome_org_query_select_focus_assembly"] = False
-    st.session_state["genome_org_previous_scope"] = None
-    st.query_params.clear()
-    if pd.notna(sample_id):
-        st.query_params["sample_id"] = str(int(sample_id))
-    st.query_params["tale_id"] = str(selected_id)
-    if hasattr(st, "switch_page"):
-        st.switch_page("pages/04_Genome_Organization.py")
+    open_genome_organization(
+        selected_id,
+        int(sample_id) if pd.notna(sample_id) else None,
+        coalesce_text(row.get("species")),
+        coalesce_text(row.get("pathovar")),
+    )
 if nav_col3.button("🧾 Open Sample Page", key=f"to_sample_{int(row['tale_id'])}", use_container_width=True):
     if pd.notna(sample_id):
         st.session_state["sample_page_pending_sample_id"] = int(sample_id)

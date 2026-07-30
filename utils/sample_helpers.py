@@ -18,7 +18,7 @@ def add_species_pathovar_columns(rows: pd.DataFrame) -> pd.DataFrame:
         "", UNKNOWN_COUNTRY
     )
     enriched["species_pathovar"] = (
-        enriched["species_display"] + " " + enriched["pathovar_display"]
+        enriched["species_display"] + " pv. " + enriched["pathovar_display"]
     ).where(enriched["pathovar_display"] != UNKNOWN_COUNTRY, enriched["species_display"])
     return enriched
 

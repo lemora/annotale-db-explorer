@@ -37,7 +37,7 @@ def abbreviated_taxon(species: object, pathovar: object, taxon_name: object) -> 
     species_text = optional_text(species)
     pathovar_text = optional_text(pathovar)
     if species_text:
-        base = species_text if not pathovar_text else f"{species_text} {pathovar_text}"
+        base = species_text if not pathovar_text else f"{species_text} pv. {pathovar_text}"
     else:
         base = optional_text(taxon_name)
     if not base:

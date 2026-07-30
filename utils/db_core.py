@@ -22,7 +22,7 @@ def get_conn() -> sqlite3.Connection:
 
 @st.cache_resource
 def _get_conn(fingerprint: tuple[int, int]) -> sqlite3.Connection:
-    conn = sqlite3.connect(f"file:{DB_PATH}?mode=rw", uri=True, check_same_thread=False)
+    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute(
         """

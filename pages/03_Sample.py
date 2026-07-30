@@ -125,14 +125,16 @@ st.markdown(
         color: #182018;
         margin: 0 0 0.35rem 0;
     }
-    .sample-meta {
+    .sample-meta-list {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        column-gap: 1rem;
+        row-gap: 0.3rem;
         font-size: 0.98rem;
         color: #334033;
         margin: 0.15rem 0;
     }
     .sample-meta-label {
-        display: inline-block;
-        min-width: 7rem;
         font-weight: 700;
         color: #1f271c;
     }
@@ -158,7 +160,7 @@ st.markdown(
         title_selector=".sample-title",
         sub_selector=".sample-kicker",
         label_selector=".sample-meta-label",
-        text_selector=".sample-meta",
+        text_selector=".sample-meta-list, .sample-meta-value",
         link_card_selector=".link-card",
         link_title_selector=".link-card strong",
         link_text_selector=".link-card span",
@@ -243,6 +245,9 @@ pathovar_name = coalesce_text(row.get("pathovar"))
 if taxonomy_name != "Unknown" and pathovar_name != "Unknown":
     taxonomy_name = f"{taxonomy_name} pv. {pathovar_name}"
 taxonomy_level = coalesce_text(row.get("taxonomy_rank"))
+taxonomy_record_name = coalesce_text(row.get("taxon_name"))
+if taxonomy_level == "strain" and taxonomy_record_name != taxonomy_name:
+    taxonomy_name = f"{taxonomy_name} (strain: {taxonomy_record_name})"
 assemblies = load_sample_assemblies(selected_sample_id)
 tales = load_strain_tales(selected_sample_id)
 tale_counts = (
@@ -261,11 +266,12 @@ st.markdown(
     <div class="sample-hero">
         <div class="sample-kicker">Sample Record</div>
         <div class="sample-title">{sample_name}</div>
-        <div class="sample-meta"><span class="sample-meta-label">Taxonomy</span>{taxonomy_name}</div>
-        <div class="sample-meta"><span class="sample-meta-label">Taxonomy level</span>{missing_value_label(taxonomy_level, 'taxonomy level')}</div>
-        <div class="sample-meta"><span class="sample-meta-label">BioSample</span>{missing_value_label(coalesce_text(row.get('biosample_id')), 'BioSample')}</div>
-        <div class="sample-meta"><span class="sample-meta-label">Location</span>{missing_value_label(coalesce_text(row.get('geo_tag')), 'location')}</div>
-        <div class="sample-meta"><span class="sample-meta-label">Collection date</span>{missing_value_label(coalesce_text(row.get('collection_date')), 'collection date')}</div>
+        <div class="sample-meta-list">
+            <span class="sample-meta-label">Legacy name</span><span class="sample-meta-value">{missing_value_label(coalesce_text(row.get('legacy_strain_name')), 'legacy name')}</span>
+            <span class="sample-meta-label">Taxonomy</span><span class="sample-meta-value">{taxonomy_name}</span>
+            <span class="sample-meta-label">Location</span><span class="sample-meta-value">{missing_value_label(coalesce_text(row.get('geo_tag')), 'location')}</span>
+            <span class="sample-meta-label">Collection date</span><span class="sample-meta-value">{missing_value_label(coalesce_text(row.get('collection_date')), 'collection date')}</span>
+        </div>
     </div>
     """,
     unsafe_allow_html=True,

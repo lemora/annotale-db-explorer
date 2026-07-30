@@ -37,63 +37,27 @@ def load_tales() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def load_crosstab_source() -> pd.DataFrame:
-    return query_df(
-        """
-        SELECT fm.family_id AS family,
-               s.id AS sample_id,
-               s.strain_name,
-               s.legacy_strain_name,
-               tx.species,
-               tx.pathovar,
-               tx.raw_name AS taxon_name
-        FROM tale_family_member fm
-        JOIN tale t ON t.id = fm.tale_id
-        LEFT JOIN assembly a ON a.id = t.assembly_id
-        LEFT JOIN samples s ON s.id = a.sample_id
-        LEFT JOIN taxonomy_compat tx ON tx.id = s.taxon_id
-        """
-    )
-
-
-@st.cache_data(show_spinner=False)
-def load_tale_set_cluster_source() -> pd.DataFrame:
-    return query_df(
-        """
-        SELECT fm.family_id AS family,
-               t.id AS tale_id,
-               t.is_pseudo,
-               a.id AS assembly_id,
-               a.accession,
-               a.replicon_type,
-               s.id AS sample_id,
-               s.strain_name,
-               s.legacy_strain_name,
-               tx.species,
-               tx.pathovar,
-               tx.raw_name AS taxon_name
-        FROM tale_family_member fm
-        JOIN tale t ON t.id = fm.tale_id
-        LEFT JOIN assembly a ON a.id = t.assembly_id
-        LEFT JOIN samples s ON s.id = a.sample_id
-        LEFT JOIN taxonomy_compat tx ON tx.id = s.taxon_id
-        """
-    )
-
-
-@st.cache_data(show_spinner=False)
 def load_family_tale_rows(family_name: str) -> pd.DataFrame:
     return query_df(
         """
         SELECT t.id AS id,
-               t.legacy_name AS name,
+               fm.family_id AS family,
+               s.strain_name,
+               s.legacy_strain_name,
+               tx.species,
+               tx.pathovar,
+               tx.raw_name AS taxon_name,
                t.is_pseudo AS is_pseudo,
                MAX(r.repeat_ordinal) + 1 AS repeat_len
         FROM tale_family_member fm
         JOIN tale t ON t.id = fm.tale_id
         LEFT JOIN repeat r ON r.tale_id = t.id
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        LEFT JOIN samples s ON s.id = a.sample_id
+        LEFT JOIN taxonomy_compat tx ON tx.id = s.taxon_id
         WHERE fm.family_id = ?
-        GROUP BY t.id, t.legacy_name, t.is_pseudo
+        GROUP BY t.id, fm.family_id, s.strain_name, s.legacy_strain_name,
+                 tx.species, tx.pathovar, tx.raw_name, t.is_pseudo
         ORDER BY t.id
         """,
         params=[family_name],
@@ -178,8 +142,18 @@ def load_tale_options() -> pd.DataFrame:
     return query_df(
         """
         SELECT t.id AS tale_id,
-               t.legacy_name AS tale_name
+               t.legacy_name,
+               fm.family_id AS family,
+               s.strain_name,
+               s.legacy_strain_name,
+               tx.species,
+               tx.pathovar,
+               tx.raw_name AS taxon_name
         FROM tale t
+        LEFT JOIN tale_family_member fm ON fm.tale_id = t.id
+        LEFT JOIN assembly a ON a.id = t.assembly_id
+        LEFT JOIN samples s ON s.id = a.sample_id
+        LEFT JOIN taxonomy_compat tx ON tx.id = s.taxon_id
         ORDER BY t.id
         """
     )

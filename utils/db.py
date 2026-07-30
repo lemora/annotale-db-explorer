@@ -15,7 +15,6 @@ from utils.sample_queries import (
     load_strains,
 )
 from utils.tale_queries import (
-    load_crosstab_source,
     load_families,
     load_family_download_rows,
     load_family_members,
@@ -25,6 +24,5 @@ from utils.tale_queries import (
     load_tale_detail,
     load_tale_options,
     load_tale_rvds,
-    load_tale_set_cluster_source,
     load_tales,
 )

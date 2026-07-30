@@ -37,7 +37,8 @@ def format_taxon(
     taxon_name = normalize_taxon_text(df[taxon_name_col])
     base = species.where(species != "", pd.NA)
     if include_pathovar:
-        base = base + " " + pathovar.where(pathovar != "", "")
+        pathovar = pathovar.fillna("")
+        base = base + pathovar.where(pathovar == "", " pv. " + pathovar)
     return base.fillna(taxon_name)
 
 
