@@ -3,7 +3,7 @@ import html
 import streamlit as st
 import streamlit.components.v1 as components
 
-from utils.db import (
+from utils.tale_queries import (
     load_families,
     load_family_download_rows,
     load_family_members,

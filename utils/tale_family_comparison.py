@@ -14,7 +14,7 @@ from utils.clustering import (
     order_entities,
     strain_label,
 )
-from utils.db import load_crosstab_source, load_tale_set_cluster_source
+from utils.tale_queries import load_crosstab_source, load_tale_set_cluster_source
 from utils.taxonomy import (
     abbreviate_taxon_labels,
     filter_incomplete_taxa,

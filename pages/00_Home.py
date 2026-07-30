@@ -1,6 +1,7 @@
 import streamlit as st
 
-from utils.db import load_families, load_strains, load_tales
+from utils.sample_queries import load_strains
+from utils.tale_queries import load_families, load_tales
 from utils.page import init_page
 
 REPO_URL = "https://github.com/lemora/annotale-db-explorer"

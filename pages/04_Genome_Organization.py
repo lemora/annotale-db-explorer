@@ -4,12 +4,18 @@ import streamlit as st
 from urllib.parse import quote
 
 from utils.analytics import track_page_visit
-from utils.db import load_strain_tales, load_strains, load_tale_detail, query_df
 from utils.fasta_export import (
     build_multi_fasta,
     slugify_filename_part,
 )
 from utils.page import init_page
+from utils.sample_helpers import (
+    add_species_pathovar_columns,
+    country_or_unknown,
+    format_sample_label,
+)
+from utils.sample_queries import load_sample_ids_with_tales, load_strains
+from utils.tale_queries import load_strain_tales, load_tale_detail
 from utils.taxonomy import abbreviate_taxon_labels, resolved_taxon_labels
 from utils.theme import SELECTED_ACCENT, blue_card_dark_mode_css
 
@@ -245,33 +251,7 @@ def assembly_sort_rank(replicon_type: object) -> int:
 
 
 def sample_option_label(row: pd.Series) -> str:
-    strain_name = str(row["strain_name"] or "").strip()
-    if not strain_name or strain_name.lower() == "nan":
-        strain_name = str(row["legacy_strain_name"] or "").strip()
-    if not strain_name or strain_name.lower() == "nan":
-        strain_name = "unknown strain"
-
-    biosample_id = str(row["biosample_id"] or "").strip()
-    if biosample_id and biosample_id.lower() != "nan":
-        return f"{strain_name} | {biosample_id}"
-    return f"{strain_name} | unknown biosample id"
-
-
-def map_country_from_geo_tag(value: str | None) -> str:
-    if value is None:
-        return "Unknown"
-    cleaned = str(value).strip()
-    if not cleaned:
-        return "Unknown"
-    if cleaned.lower() in {"-", "unknown", "missing"}:
-        return "Unknown"
-    if ":" in cleaned:
-        cleaned = cleaned.split(":", 1)[0].strip()
-    if "," in cleaned:
-        cleaned = cleaned.split(",", 1)[0].strip()
-    if cleaned.lower() in {"-", "unknown", "missing"}:
-        return "Unknown"
-    return cleaned or "Unknown"
+    return format_sample_label(row)
 
 
 def sample_map_species_pathovar_label(selected_species: str, selected_pathovar: str) -> str:
@@ -279,46 +259,13 @@ def sample_map_species_pathovar_label(selected_species: str, selected_pathovar: 
     return abbreviate_taxon_labels(pd.Series([label])).iloc[0]
 
 
-def sample_ids_with_tales() -> set[int]:
-    rows = query_df(
-        """
-        SELECT DISTINCT a.sample_id AS sample_id
-        FROM tale t
-        JOIN assembly a ON a.id = t.assembly_id
-        WHERE a.sample_id IS NOT NULL
-        """
-    )
-    return set(pd.to_numeric(rows["sample_id"], errors="coerce").dropna().astype(int))
-
-
-def split_species_pathovar(label: str) -> tuple[str, str]:
-    cleaned = str(label or "").strip()
-    if not cleaned or cleaned.lower() == "unknown":
-        return "Unknown", "Unknown"
-
-    parts = cleaned.split(maxsplit=2)
-    if len(parts) >= 3:
-        return f"{parts[0]} {parts[1]}", parts[2]
-    if len(parts) == 2:
-        return cleaned, "Unknown"
-    return cleaned, "Unknown"
-
-
 def load_scope_samples() -> pd.DataFrame:
     strains = load_strains()
     if strains.empty:
         return strains
 
-    scoped = strains.copy()
-    scoped["species_pathovar"] = resolved_taxon_labels(
-        scoped,
-        include_pathovar=True,
-    )
-    scoped = scoped[scoped["id"].isin(sample_ids_with_tales())].copy()
-
-    split_values = scoped["species_pathovar"].apply(split_species_pathovar)
-    scoped["species_display"] = split_values.str[0]
-    scoped["pathovar_display"] = split_values.str[1]
+    scoped = add_species_pathovar_columns(strains)
+    scoped = scoped[scoped["id"].isin(load_sample_ids_with_tales())].copy()
     return scoped.sort_values(
         ["species_display", "pathovar_display", "id"]
     ).reset_index(drop=True)
@@ -1203,7 +1150,7 @@ def render_selection_summary(
             key=f"to_sample_map_{int(selected_sample_row['id'])}",
             use_container_width=True,
         ):
-            target_country = map_country_from_geo_tag(selected_sample_row.get("geo_tag"))
+            target_country = country_or_unknown(selected_sample_row.get("geo_tag"))
             target_taxon = sample_map_species_pathovar_label(
                 selected_species,
                 selected_pathovar,

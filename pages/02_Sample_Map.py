@@ -6,14 +6,17 @@ from streamlit_plotly_events import plotly_events
 
 from utils.analytics import track_page_visit
 from utils.clustering import preferred_strain_label
-from utils.db import load_sample_map_source, load_sample_taxonomy
 from utils.page import init_page
+from utils.sample_helpers import (
+    INVALID_COUNTRY_LABELS,
+    UNKNOWN_COUNTRY,
+    add_species_pathovar_columns,
+    parse_country,
+)
+from utils.sample_queries import load_sample_map_source, load_sample_taxonomy
 from utils.taxonomy import (
     resolved_taxon_labels,
 )
-
-INVALID_COUNTRY_LABELS = {"unknown", "missing", "-"}
-UNKNOWN_COUNTRY = "Unknown"
 
 COUNTRY_CENTROIDS = {
     "Argentina": (-38.4161, -63.6167),
@@ -64,22 +67,6 @@ COUNTRY_CENTROIDS = {
     "United Kingdom": (55.3781, -3.436),
     "Uruguay": (-32.5228, -55.7658),
 }
-
-
-def parse_country(value: str | None) -> str | None:
-    if value is None:
-        return None
-    cleaned = str(value).strip()
-    if not cleaned or cleaned.lower() in INVALID_COUNTRY_LABELS:
-        return None
-    if ":" in cleaned:
-        cleaned = cleaned.split(":", 1)[0].strip()
-    if "," in cleaned:
-        cleaned = cleaned.split(",", 1)[0].strip()
-    if not cleaned or cleaned.lower() in INVALID_COUNTRY_LABELS:
-        return None
-    return cleaned
-
 
 def sample_option_label(row: pd.Series) -> str:
     strain_display = str(row.get("strain_display") or "Unknown").strip() or "Unknown"
@@ -139,29 +126,8 @@ def build_taxonomy_labels(include_pathovar: bool) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def build_taxonomy_filter_rows() -> pd.DataFrame:
-    tax_raw = load_sample_taxonomy().copy()
-    combined = resolved_taxon_labels(
-        tax_raw,
-        include_pathovar=True,
-    ).fillna("Unknown")
-
-    split_values = combined.apply(split_species_pathovar)
-    tax_raw["species_display"] = split_values.str[0].fillna("Unknown")
-    tax_raw["pathovar_display"] = split_values.str[1].fillna("Unknown")
+    tax_raw = add_species_pathovar_columns(load_sample_taxonomy())
     return tax_raw[["sample_id", "species_display", "pathovar_display"]]
-
-
-def split_species_pathovar(label: str) -> tuple[str, str]:
-    cleaned = str(label or "").strip()
-    if not cleaned or cleaned.lower() == "unknown":
-        return "Unknown", "Unknown"
-
-    parts = cleaned.split(maxsplit=2)
-    if len(parts) >= 3:
-        return f"{parts[0]} {parts[1]}", parts[2]
-    if len(parts) == 2:
-        return cleaned, "Unknown"
-    return cleaned, "Unknown"
 
 
 @st.cache_data(show_spinner=False)

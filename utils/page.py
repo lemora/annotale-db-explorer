@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 
 from utils.analytics import track_page_visit
-from utils.db import DB_PATH
+from utils.db_core import DB_PATH
 
 REQUIRED_TABLES = {
     "tale",

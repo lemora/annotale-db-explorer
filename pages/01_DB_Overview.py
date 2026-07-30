@@ -1,6 +1,6 @@
 import streamlit as st
 
-from utils.db import foreign_key_relations, table_counts, table_rows, table_schema
+from utils.db_schema import foreign_key_relations, table_counts, table_rows, table_schema
 from utils.page import init_page
 
 init_page("DB Overview", "DB Overview")

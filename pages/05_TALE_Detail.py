@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.analytics import track_page_visit
-from utils.db import load_tale_detail, load_tale_options, load_tale_rvds
+from utils.tale_queries import load_tale_detail, load_tale_options, load_tale_rvds
 from utils.fasta_export import (
     coalesce_text,
     fasta_text,

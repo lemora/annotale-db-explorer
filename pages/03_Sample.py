@@ -2,13 +2,17 @@ import pandas as pd
 import streamlit as st
 
 from utils.analytics import track_page_visit
-from utils.clustering import preferred_strain_label
-from utils.db import (
+from utils.sample_helpers import (
+    build_sample_selector_rows,
+    country_or_unknown,
+    format_sample_label,
+)
+from utils.sample_queries import (
     load_sample_assemblies,
     load_sample_detail,
-    load_strain_tales,
     load_strains,
 )
+from utils.tale_queries import load_strain_tales
 from utils.fasta_export import coalesce_text
 from utils.page import init_page
 from utils.taxonomy import resolved_taxon_labels
@@ -64,42 +68,12 @@ def assembly_option_label(row: pd.Series) -> str:
     return accession
 
 
-def split_species_pathovar(label: str) -> tuple[str, str]:
-    cleaned = str(label or "").strip()
-    if not cleaned or cleaned.lower() == "unknown":
-        return "Unknown", "Unknown"
-    parts = cleaned.split(maxsplit=2)
-    if len(parts) >= 3:
-        return f"{parts[0]} {parts[1]}", parts[2]
-    if len(parts) == 2:
-        return cleaned, "Unknown"
-    return cleaned, "Unknown"
-
-
 def sample_option_label(row: pd.Series) -> str:
-    strain_name = str(row.get("strain_name") or "").strip()
-    if not strain_name or strain_name.lower() == "nan":
-        strain_name = str(row.get("legacy_strain_name") or "").strip()
-    if not strain_name or strain_name.lower() == "nan":
-        strain_name = "unknown strain"
-
-    biosample_id = str(row.get("biosample_id") or "").strip()
-    if biosample_id and biosample_id.lower() != "nan":
-        return f"{strain_name} | {biosample_id}"
-    return f"{strain_name} | unknown biosample id"
+    return format_sample_label(row)
 
 
 def load_sample_selector_rows() -> pd.DataFrame:
-    rows = load_strains().copy().rename(columns={"id": "sample_id"})
-    rows["sample_display"] = preferred_strain_label(rows, default="Unknown").fillna("Unknown")
-    rows["species_pathovar"] = resolved_taxon_labels(
-        rows,
-        include_pathovar=True,
-    )
-    split_values = rows["species_pathovar"].apply(split_species_pathovar)
-    rows["species_display"] = split_values.str[0]
-    rows["pathovar_display"] = split_values.str[1]
-    return rows.sort_values(["sample_id"]).reset_index(drop=True)
+    return build_sample_selector_rows(load_strains())
 
 
 def initialize_widget_state(key: str, options: list[str] | list[int], fallback) -> None:
@@ -111,25 +85,6 @@ def sync_sample_url(sample_id: int) -> None:
     st.query_params.clear()
     st.query_params["sample_id"] = str(int(sample_id))
     st.session_state["sample_page_last_query_id"] = int(sample_id)
-
-
-def map_country_from_geo_tag(value: str | None) -> str:
-    if value is None:
-        return "Unknown"
-    cleaned = str(value).strip()
-    if not cleaned:
-        return "Unknown"
-    if cleaned.lower() in {"-", "unknown", "missing"}:
-        return "Unknown"
-    if ":" in cleaned:
-        cleaned = cleaned.split(":", 1)[0].strip()
-    if "," in cleaned:
-        cleaned = cleaned.split(",", 1)[0].strip()
-    if cleaned.lower() in {"-", "unknown", "missing"}:
-        return "Unknown"
-    return cleaned or "Unknown"
-
-
 init_page("Sample", "Sample", track_analytics=False)
 st.title("Sample")
 
@@ -304,7 +259,7 @@ st.markdown(
 
 nav_col1, nav_col2 = st.columns(2)
 if nav_col1.button("📍 Open in Sample Map", use_container_width=True):
-    st.session_state["sample_map_pending_country"] = map_country_from_geo_tag(
+    st.session_state["sample_map_pending_country"] = country_or_unknown(
         row.get("geo_tag")
     )
     st.session_state["sample_map_pending_taxon"] = taxonomy_name
@@ -353,7 +308,7 @@ with card_cols[0]:
     st.markdown(
         f"""
         <div class="link-card">
-            <strong>Taxonomy</strong>
+            <strong>Taxonomy ({missing_value_label(taxonomy_level, 'level')})</strong>
             <span>{missing_value_label(taxonomy_name, 'taxonomy')}</span>
         </div>
         """,
