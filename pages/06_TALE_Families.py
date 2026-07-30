@@ -5,18 +5,18 @@ import streamlit.components.v1 as components
 
 from utils.tale_queries import (
     load_families,
+    load_family_alignment,
     load_family_download_rows,
     load_family_members,
-    load_family_rvd_counts,
     load_family_species_pathovar,
     load_family_tale_rows,
-    load_tale_rvds,
     load_tales,
 )
 from utils.fasta_export import (
     build_multi_fasta,
     slugify_filename_part,
 )
+from utils.family_alignment import aligned_rvd_counts, aligned_rvds
 from utils.analytics import track_page_visit
 from utils.page import init_page
 from utils.theme import PSEUDO_TALE_GREY, SELECTED_ACCENT
@@ -695,47 +695,32 @@ with left:
     render_species_pathovar_panel(family_name)
 
     st.subheader("RVD Counts by Repeat Position")
-    selected_is_pseudo = False
-    if selected_id is not None:
-        selected_match = nodes_df[nodes_df["tale_id"] == selected_id]
-        if not selected_match.empty:
-            selected_is_pseudo = int(selected_match.iloc[0]["is_pseudo"] or 0) == 1
-    if selected_is_pseudo:
-        st.session_state["exclude_pseudo_family_plots"] = False
     exclude_pseudo_plots = st.checkbox(
         "Exclude pseudo TALEs in plot",
         value=False,
         key="exclude_pseudo_family_plots",
-        disabled=selected_is_pseudo,
     )
 
-    rvd_pos_all = load_family_rvd_counts(family_name, exclude_pseudo=False)
-    rvd_pos_filtered = load_family_rvd_counts(family_name, exclude_pseudo=True)
-    if not rvd_pos_all.empty:
-        rvd_pos_all["position"] = rvd_pos_all["position"] + 1
-    if not rvd_pos_filtered.empty:
-        rvd_pos_filtered["position"] = rvd_pos_filtered["position"] + 1
+    family_alignment = load_family_alignment(family_name)
+    pseudo_tale_ids = set(
+        tale_rows.loc[tale_rows["is_pseudo"].fillna(0).astype(int) == 1, "id"].astype(int)
+    )
+    rvd_pos_all = aligned_rvd_counts(family_alignment)
+    rvd_pos_filtered = aligned_rvd_counts(family_alignment, pseudo_tale_ids)
     rvd_pos = rvd_pos_filtered if exclude_pseudo_plots else rvd_pos_all
+    pos_domain = sorted(rvd_pos_all["position"].dropna().unique().tolist())
+    rvd_domain = sorted(rvd_pos_all["rvd"].dropna().unique().tolist())
 
     if rvd_pos.empty:
-        st.info("No repeat data for this family.")
+        st.info("No alignment data for this family.")
     else:
-        pos_domain = sorted(rvd_pos["position"].dropna().unique().tolist())
-        rvd_domain_all = sorted(rvd_pos_all["rvd"].dropna().unique().tolist())
-        rvd_domain_filtered = sorted(rvd_pos_filtered["rvd"].dropna().unique().tolist())
-        rvd_domain = (
-            [rvd for rvd in rvd_domain_all if rvd in rvd_domain_filtered]
-            if exclude_pseudo_plots
-            else rvd_domain_all
-        )
-
         rvd_chart = (
             alt.Chart(rvd_pos)
             .mark_bar()
             .encode(
                 x=alt.X(
                     "position:O",
-                    title="Repeat position within TALE",
+                    title="Aligned repeat position",
                     sort="ascending",
                     scale=alt.Scale(domain=pos_domain),
                 ),
@@ -750,43 +735,43 @@ with left:
         )
         st.altair_chart(rvd_chart.properties(height=RVD_CHART_HEIGHT), use_container_width=True)
 
-        st.subheader("Selected TALE RVDs")
-        if selected_id is None:
-            st.info("Select a TALE to show its RVD sequence.")
+    st.subheader("Selected TALE RVDs")
+    if selected_id is None:
+        st.info("Select a TALE to show its RVD sequence.")
+    else:
+        tale_rvds = aligned_rvds(family_alignment)
+        tale_rvds = tale_rvds[tale_rvds["tale_id"] == int(selected_id)]
+        if tale_rvds.empty:
+            st.info("No alignment data for the selected TALE.")
         else:
-            tale_rvds = load_tale_rvds(int(selected_id))
-            if tale_rvds.empty:
-                st.info("No repeat data for the selected TALE.")
-            else:
-                tale_rvds["position"] = tale_rvds["position"] + 1
-                tale_base = alt.Chart(tale_rvds).encode(
-                    x=alt.X(
-                        "position:O",
-                        title="Repeat position",
-                        sort="ascending",
-                        axis=alt.Axis(labelOverlap=False),
-                        scale=alt.Scale(domain=pos_domain),
-                    ),
-                    tooltip=["position:Q", "rvd:N"],
-                )
-                tale_bars = tale_base.mark_bar().encode(
-                    y=alt.value(0),
-                    color=alt.Color(
-                        "rvd:N",
-                        scale=alt.Scale(domain=rvd_domain, scheme="tableau20"),
-                        legend=None,
-                    ),
-                )
-                tale_labels = tale_base.mark_text(
-                    dy=-6,
-                    size=10,
-                    color="#2b2b2b",
-                ).encode(
-                    y=alt.value(0),
-                    text="rvd:N",
-                )
-                tale_chart = alt.layer(tale_bars, tale_labels)
-                st.altair_chart(
-                    tale_chart.properties(height=SELECTED_RVD_HEIGHT),
-                    use_container_width=True,
-                )
+            tale_base = alt.Chart(tale_rvds).encode(
+                x=alt.X(
+                    "position:O",
+                    title="Aligned repeat position",
+                    sort="ascending",
+                    axis=alt.Axis(labelOverlap=False),
+                    scale=alt.Scale(domain=pos_domain),
+                ),
+                tooltip=["position:Q", "rvd:N"],
+            )
+            tale_bars = tale_base.mark_bar().encode(
+                y=alt.value(0),
+                color=alt.Color(
+                    "rvd:N",
+                    scale=alt.Scale(domain=rvd_domain, scheme="tableau20"),
+                    legend=None,
+                ),
+            )
+            tale_labels = tale_base.mark_text(
+                dy=-6,
+                size=10,
+                color="#2b2b2b",
+            ).encode(
+                y=alt.value(0),
+                text="rvd:N",
+            )
+            tale_chart = alt.layer(tale_bars, tale_labels)
+            st.altair_chart(
+                tale_chart.properties(height=SELECTED_RVD_HEIGHT),
+                use_container_width=True,
+            )

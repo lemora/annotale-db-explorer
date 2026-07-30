@@ -14,6 +14,14 @@ def load_families() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def load_family_alignment(family_name: str) -> str:
+    rows = query_df(
+        "SELECT alignment_fasta FROM tale_family WHERE name = ?", params=[family_name]
+    )
+    return "" if rows.empty else str(rows.iloc[0]["alignment_fasta"] or "")
+
+
+@st.cache_data(show_spinner=False)
 def load_family_members() -> pd.DataFrame:
     return query_df("SELECT family_id, tale_id FROM tale_family_member")
 
@@ -107,23 +115,6 @@ def load_family_species_pathovar(family_name: str) -> pd.DataFrame:
         LEFT JOIN samples s ON s.id = a.sample_id
         LEFT JOIN taxonomy_compat tx ON tx.id = s.taxon_id
         WHERE fm.family_id = ?
-        """,
-        params=[family_name],
-    )
-
-
-@st.cache_data(show_spinner=False)
-def load_family_rvd_counts(family_name: str, exclude_pseudo: bool = False) -> pd.DataFrame:
-    clause = " AND t.is_pseudo = 0" if exclude_pseudo else ""
-    return query_df(
-        f"""
-        SELECT r.repeat_ordinal AS position, r.rvd AS rvd, COUNT(*) AS count
-        FROM repeat r
-        JOIN tale t ON t.id = r.tale_id
-        JOIN tale_family_member fm ON fm.tale_id = t.id
-        WHERE fm.family_id = ?{clause}
-        GROUP BY r.repeat_ordinal, r.rvd
-        ORDER BY r.repeat_ordinal
         """,
         params=[family_name],
     )
