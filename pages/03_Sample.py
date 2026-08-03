@@ -51,7 +51,8 @@ def ncbi_assembly_url(accession: str) -> str:
 
 
 def ncbi_accession_url(accession: str, accession_type: object) -> str:
-    if str(accession_type or "").strip().lower() == "assembly":
+    accession_type = str(accession_type or "").strip().lower()
+    if accession_type == "assembly":
         return ncbi_assembly_url(accession)
     return ncbi_nuccore_url(accession)
 
@@ -323,6 +324,10 @@ accession_type = (
 )
 biosample_id = coalesce_text(row.get("biosample_id"))
 ncbi_tax_id = row.get("ncbi_tax_id")
+has_ncbi_accession = (
+    accession_text != "Unknown"
+    and str(accession_type or "").strip().lower() != "zenodo"
+)
 card_cols = st.columns(3)
 with card_cols[0]:
     st.markdown(
@@ -374,9 +379,9 @@ with card_cols[2]:
         with assembly_action_cols[0]:
             st.link_button(
                 "Open NCBI Assembly",
-                ncbi_accession_url(accession_text, accession_type) if accession_text != "Unknown" else "#",
+                ncbi_accession_url(accession_text, accession_type) if has_ncbi_accession else "#",
                 use_container_width=True,
-                disabled=accession_text == "Unknown",
+                disabled=not has_ncbi_accession,
             )
         with assembly_action_cols[1]:
             st.selectbox(
@@ -391,9 +396,9 @@ with card_cols[2]:
     else:
         st.link_button(
             "Open NCBI Assembly",
-            ncbi_accession_url(accession_text, accession_type) if accession_text != "Unknown" else "#",
+            ncbi_accession_url(accession_text, accession_type) if has_ncbi_accession else "#",
             use_container_width=True,
-            disabled=accession_text == "Unknown",
+            disabled=not has_ncbi_accession,
         )
 
 stats_left, stats_mid, stats_right = st.columns(3)
