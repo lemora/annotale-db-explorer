@@ -240,16 +240,21 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
         selected_class = " selected" if selected_id == rid else ""
         rep_len = row["repeat_len"]
         rep_len_display = f"{int(rep_len)}" if rep_len == rep_len else ""
+        pseudo_display = (
+            "Yes"
+            if pd.notna(row.get("is_pseudo")) and int(row["is_pseudo"]) == 1
+            else "No"
+        )
         rows_html.append(
             f"<tr class='row{selected_class}' data-id='{rid}'>"
             f"<td>{tale_label}</td><td>{taxonomy_label}</td><td>{sample_label}</td>"
-            f"<td>{rep_len_display}</td></tr>"
+            f"<td>{rep_len_display}</td><td>{pseudo_display}</td></tr>"
         )
 
     table_html = f"""
     <div id='tale-table-wrapper'>
       <table id='tale-table'>
-        <thead><tr><th>TALE ID</th><th>Taxonomy</th><th>Sample</th><th>Repeat Length</th></tr></thead>
+        <thead><tr><th>ID</th><th>Taxonomy</th><th>Sample</th><th>Repeats</th><th>Pseudo</th></tr></thead>
         <tbody>
           {''.join(rows_html)}
         </tbody>
@@ -308,6 +313,7 @@ def render_tale_table(tale_rows, selected_id: int | None) -> None:
         padding: 6px 8px;
         border-bottom: 1px solid var(--tale-table-border);
       }}
+      #tale-table th {{ text-align: left; }}
       #tale-table tr.row.selected {{
         background: var(--tale-table-selected-bg);
         color: var(--tale-table-selected-text);
