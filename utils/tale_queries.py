@@ -6,6 +6,32 @@ import streamlit as st
 from utils.db_core import query_df
 
 
+TALE_SEQUENCES_CTE = """
+WITH tale_sequences AS (
+    SELECT t.*,
+           t.dna_start_seq || COALESCE((
+               SELECT group_concat(dna_seq, '')
+               FROM (
+                   SELECT r.dna_seq
+                   FROM repeat r
+                   WHERE r.tale_id = t.id
+                   ORDER BY r.repeat_ordinal
+               )
+           ), '') || t.dna_end_seq AS dna_seq,
+           t.protein_start_seq || COALESCE((
+               SELECT group_concat(protein_seq, '')
+               FROM (
+                   SELECT r.protein_seq
+                   FROM repeat r
+                   WHERE r.tale_id = t.id
+                   ORDER BY r.repeat_ordinal
+               )
+           ), '') || t.protein_end_seq AS protein_seq
+    FROM tale t
+)
+"""
+
+
 @st.cache_data(show_spinner=False)
 def load_families() -> pd.DataFrame:
     return query_df(
@@ -29,9 +55,10 @@ def load_family_members() -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_tales() -> pd.DataFrame:
     return query_df(
-        "SELECT t.id, t.legacy_name AS name, t.is_pseudo, a.sample_id AS strain_id, "
+        TALE_SEQUENCES_CTE
+        + "SELECT t.id, t.legacy_name AS name, t.is_pseudo, a.sample_id AS strain_id, "
         "t.start_pos, t.end_pos, t.strand, t.is_new, t.dna_seq, t.protein_seq "
-        "FROM tale t "
+        "FROM tale_sequences t "
         "LEFT JOIN assembly a ON a.id = t.assembly_id"
     )
 
@@ -48,7 +75,7 @@ def load_family_tale_rows(family_name: str) -> pd.DataFrame:
                tx.pathovar,
                tx.raw_name AS taxon_name,
                t.is_pseudo AS is_pseudo,
-               MAX(r.repeat_ordinal) + 1 AS repeat_len
+               COUNT(r.repeat_ordinal) AS repeat_len
         FROM tale_family_member fm
         JOIN tale t ON t.id = fm.tale_id
         LEFT JOIN repeat r ON r.tale_id = t.id
@@ -100,7 +127,8 @@ def load_tale_rvds(tale_id: int) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_strain_tales(strain_id: int) -> pd.DataFrame:
     return query_df(
-        """
+        TALE_SEQUENCES_CTE
+        + """
         SELECT t.id AS tale_id,
                t.legacy_name AS tale_name,
                t.dna_seq,
@@ -121,7 +149,7 @@ def load_strain_tales(strain_id: int) -> pd.DataFrame:
                tx.raw_name AS taxon_name,
                tx.species,
                tx.pathovar
-        FROM tale t
+        FROM tale_sequences t
         LEFT JOIN assembly a ON a.id = t.assembly_id
         LEFT JOIN tale_family_member fm ON fm.tale_id = t.id
         LEFT JOIN samples s ON s.id = a.sample_id
@@ -162,7 +190,8 @@ def load_tale_options() -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_tale_detail(tale_id: int) -> pd.DataFrame:
     return query_df(
-        """
+        TALE_SEQUENCES_CTE
+        + """
         SELECT t.id AS tale_id,
                t.legacy_name AS tale_name,
                t.dna_seq,
@@ -189,7 +218,7 @@ def load_tale_detail(tale_id: int) -> pd.DataFrame:
                tx.raw_name AS taxon_name,
                tx.species,
                tx.pathovar
-        FROM tale t
+        FROM tale_sequences t
         LEFT JOIN tale_family_member fm ON fm.tale_id = t.id
         LEFT JOIN assembly a ON a.id = t.assembly_id
         LEFT JOIN samples s ON s.id = a.sample_id
@@ -203,7 +232,8 @@ def load_tale_detail(tale_id: int) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_family_download_rows(family_name: str) -> pd.DataFrame:
     return query_df(
-        """
+        TALE_SEQUENCES_CTE
+        + """
         SELECT t.id AS tale_id,
                t.legacy_name AS tale_name,
                t.dna_seq,
@@ -218,7 +248,7 @@ def load_family_download_rows(family_name: str) -> pd.DataFrame:
                tx.species,
                tx.pathovar
         FROM tale_family_member fm
-        JOIN tale t ON t.id = fm.tale_id
+        JOIN tale_sequences t ON t.id = fm.tale_id
         LEFT JOIN assembly a ON a.id = t.assembly_id
         LEFT JOIN samples s ON s.id = a.sample_id
         LEFT JOIN taxonomy_compat tx ON tx.id = s.taxon_id

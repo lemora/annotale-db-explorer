@@ -436,7 +436,7 @@ download_cols[1].download_button(
     use_container_width=True,
 )
 
-seq_tab_dna, seq_tab_protein, seq_tab_meta = st.tabs(["DNA", "Protein", "Metadata"])
+seq_tab_dna, seq_tab_protein = st.tabs(["DNA", "Protein"])
 with seq_tab_dna:
     st.caption(f"DNA sequence ({len(dna_seq):,} nt)")
     if dna_seq:
@@ -449,21 +449,3 @@ with seq_tab_protein:
         st.code(protein_seq, language=None)
     else:
         st.info("No protein sequence available.")
-with seq_tab_meta:
-    meta_left, meta_right = st.columns(2)
-    with meta_left:
-        st.markdown(f"**Assembly ID:** {coalesce_text(row.get('assembly_id'))}")
-        st.markdown(f"**Accession type:** {coalesce_text(row.get('accession_type'))}")
-        st.markdown(f"**Version:** {coalesce_text(row.get('version'))}")
-        st.markdown(f"**Replicon type:** {replicon_type}")
-        st.markdown(f"**Sample ID:** {coalesce_text(row.get('sample_id'))}")
-        st.markdown(f"**BioSample ID:** {coalesce_text(row.get('biosample_id'))}")
-        st.markdown(f"**Geography:** {coalesce_text(row.get('geo_tag'))}")
-    with meta_right:
-        st.markdown(f"**Taxonomy rank:** {coalesce_text(row.get('taxonomy_rank'))}")
-        st.markdown(f"**NCBI tax ID:** {coalesce_text(row.get('ncbi_tax_id'))}")
-        st.markdown(f"**Collection date:** {coalesce_text(row.get('collection_date'))}")
-        st.markdown(f"**Coordinates:** {coalesce_text(row.get('start_pos'))} - {coalesce_text(row.get('end_pos'))}")
-        st.markdown(f"**Strand:** {current_strand}")
-        st.markdown(f"**Is new:** {'Yes' if int(row['is_new'] or 0) == 1 else 'No'}")
-        st.markdown(f"**Pseudo:** {'Yes' if int(row['is_pseudo'] or 0) == 1 else 'No'}")
