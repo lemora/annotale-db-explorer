@@ -676,6 +676,12 @@ def render_sample_navigation_card(
             st.info("No samples found for the selected species/pathovar.")
             return
 
+        visible_samples = visible_samples.sort_values(
+            ["strain_display", "sample_id"],
+            key=lambda column: column.str.casefold()
+            if column.name == "strain_display"
+            else column,
+        )
         sample_options = visible_samples["sample_id"].tolist()
         sample_dropdown_key = f"sample_map_sample_id_{selected_country}"
         if st.session_state.get(sample_dropdown_key) not in sample_options:
