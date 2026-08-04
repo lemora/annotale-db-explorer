@@ -288,13 +288,13 @@ if nav_col1.button("📍 Open in Sample Map", use_container_width=True):
     st.query_params.clear()
     st.query_params["sample_id"] = str(int(row["sample_id"]))
     if hasattr(st, "switch_page"):
-        st.switch_page("pages/02_Sample_Map.py")
+        st.switch_page("views/02_Sample_Map.py")
 if nav_col2.button("🧬 Open in Genome Organization", use_container_width=True):
     st.session_state["genome_org_pending_sample_id"] = int(row["sample_id"])
     st.session_state.pop("genome_org_pending_tale_id", None)
     st.session_state.pop("genome_org_pending_assembly", None)
     if hasattr(st, "switch_page"):
-        st.switch_page("pages/04_Genome_Organization.py")
+        st.switch_page("views/04_Genome_Organization.py")
 
 assembly_card_title = "Assemblies" if len(assemblies) > 1 else "Assembly"
 selected_assembly = assemblies.iloc[0] if not assemblies.empty else None

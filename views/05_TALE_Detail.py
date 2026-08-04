@@ -243,7 +243,7 @@ if nav_col1.button("🌳 Open in TALE Families", key=f"to_family_{int(row['tale_
     st.query_params.clear()
     st.query_params["family"] = str(family_name)
     if hasattr(st, "switch_page"):
-        st.switch_page("pages/06_TALE_Families.py")
+        st.switch_page("views/06_TALE_Families.py")
 if nav_col2.button("🧬 Open in Genome Organization", key=f"to_genome_{int(row['tale_id'])}", use_container_width=True):
     selected_id = int(row["tale_id"])
     open_genome_organization(
@@ -258,7 +258,7 @@ if nav_col3.button("🧾 Open Sample Page", key=f"to_sample_{int(row['tale_id'])
         st.query_params.clear()
         st.query_params["sample_id"] = str(int(sample_id))
         if hasattr(st, "switch_page"):
-            st.switch_page("pages/03_Sample.py")
+            st.switch_page("views/03_Sample.py")
 
 overview_left, overview_right = st.columns([1.1, 1])
 with overview_left:

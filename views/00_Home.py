@@ -57,10 +57,10 @@ def page_link(path: str, title: str, description: str) -> None:
 
 p1, p2 = st.columns(2)
 with p1:
-    page_link("pages/01_DB_Overview.py", "DB Overview", "Inspect table counts, schemas, and sample rows.")
-    page_link("pages/02_Sample_Map.py", "Sample Map", "View country-level sample distribution and metadata.")
-    page_link("pages/03_Sample.py", "Sample", "View a sample overview and links to related records.")
+    page_link("views/01_DB_Overview.py", "DB Overview", "Inspect table counts, schemas, and sample rows.")
+    page_link("views/02_Sample_Map.py", "Sample Map", "View country-level sample distribution and metadata.")
+    page_link("views/03_Sample.py", "Sample", "View a sample overview and links to related records.")
 with p2:
-    page_link("pages/04_Genome_Organization.py", "Genome Organization", "View TALE positions across assemblies and strands for a selected strain.")
-    page_link("pages/05_TALE_Detail.py", "TALE Detail", "Inspect one TALE, download sequences, and follow record-level links.")
-    page_link("pages/06_TALE_Families.py", "TALE Families", "Navigate family trees and inspect selected TALE details.")
+    page_link("views/04_Genome_Organization.py", "Genome Organization", "View TALE positions across assemblies and strands for a selected strain.")
+    page_link("views/05_TALE_Detail.py", "TALE Detail", "Inspect one TALE, download sequences, and follow record-level links.")
+    page_link("views/06_TALE_Families.py", "TALE Families", "Navigate family trees and inspect selected TALE details.")

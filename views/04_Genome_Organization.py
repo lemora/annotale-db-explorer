@@ -950,7 +950,7 @@ def render_selected_tale(selected_row: pd.Series) -> None:
             st.session_state["tale_detail_last_query_id"] = selected_id
             st.query_params["tale_id"] = str(selected_id)
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/05_TALE_Detail.py")
+                st.switch_page("views/05_TALE_Detail.py")
     with family_col:
         if st.button(
             "🌳 Open in TALE Families",
@@ -967,7 +967,7 @@ def render_selected_tale(selected_row: pd.Series) -> None:
                 st.query_params["family"] = family_name
             st.query_params["tale_id"] = str(selected_id)
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/06_TALE_Families.py")
+                st.switch_page("views/06_TALE_Families.py")
 
 
 def render_label_table(plot_df: pd.DataFrame) -> None:
@@ -1147,7 +1147,7 @@ def render_selection_summary(
             st.query_params.clear()
             st.query_params["sample_id"] = str(int(selected_sample_row["id"]))
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/03_Sample.py")
+                st.switch_page("views/03_Sample.py")
     with action_col2:
         if st.button(
             "📍 Open in Sample Map",
@@ -1163,7 +1163,7 @@ def render_selection_summary(
             st.session_state["sample_map_pending_taxon"] = target_taxon
             st.session_state["sample_map_pending_sample_id"] = int(selected_sample_row["id"])
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/02_Sample_Map.py")
+                st.switch_page("views/02_Sample_Map.py")
 
 
 def render_bottom_download(

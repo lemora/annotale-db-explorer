@@ -452,7 +452,7 @@ def render_selection_controls(
             st.session_state["tale_detail_last_query_id"] = selected_detail_tale_id
             st.query_params["tale_id"] = str(selected_detail_tale_id)
             if hasattr(st, "switch_page"):
-                st.switch_page("pages/05_TALE_Detail.py")
+                st.switch_page("views/05_TALE_Detail.py")
         if st.button("🧬 Open in Genome Organization", use_container_width=True):
             detail = load_tale_detail(selected_detail_tale_id)
             detail_row = detail.iloc[0]

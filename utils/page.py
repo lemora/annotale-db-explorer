@@ -16,13 +16,13 @@ REQUIRED_TABLES = {
 APP_TITLE = "AnnoTALE DB Explorer"
 
 SIDEBAR_PAGES = [
-    ("Home", "Home", "pages/00_Home.py"),
-    ("DB Overview", "DB Overview", "pages/01_DB_Overview.py"),
-    ("Sample Map", "Sample Map", "pages/02_Sample_Map.py"),
-    ("Sample", "Sample", "pages/03_Sample.py"),
-    ("Genome Organization", "Genome Organization", "pages/04_Genome_Organization.py"),
-    ("TALE Detail", "TALE Detail", "pages/05_TALE_Detail.py"),
-    ("TALE Families", "TALE Families", "pages/06_TALE_Families.py"),
+    ("Home", "Home", "views/00_Home.py"),
+    ("DB Overview", "DB Overview", "views/01_DB_Overview.py"),
+    ("Sample Map", "Sample Map", "views/02_Sample_Map.py"),
+    ("Sample", "Sample", "views/03_Sample.py"),
+    ("Genome Organization", "Genome Organization", "views/04_Genome_Organization.py"),
+    ("TALE Detail", "TALE Detail", "views/05_TALE_Detail.py"),
+    ("TALE Families", "TALE Families", "views/06_TALE_Families.py"),
 ]
 
 
@@ -109,4 +109,4 @@ def open_genome_organization(
         st.query_params["sample_id"] = str(sample_id)
     st.query_params["tale_id"] = str(tale_id)
     if hasattr(st, "switch_page"):
-        st.switch_page("pages/04_Genome_Organization.py")
+        st.switch_page("views/04_Genome_Organization.py")
