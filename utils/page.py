@@ -1,7 +1,7 @@
-import streamlit as st
 import sqlite3
 
-from utils.analytics import track_page_visit
+import streamlit as st
+
 from utils.db_core import DB_PATH
 
 REQUIRED_TABLES = {
@@ -50,7 +50,6 @@ def init_page(
     page_title: str,
     active_page: str,
     require_db: bool = True,
-    track_analytics: bool = True,
 ) -> None:
     browser_title = APP_TITLE if page_title == "Home" else f"{APP_TITLE}: {page_title}"
     st.set_page_config(
@@ -73,8 +72,6 @@ def init_page(
             use_container_width=True,
         )
     st.session_state["active_page"] = active_page
-    if track_analytics:
-        track_page_visit()
 
 
 def open_genome_organization(

@@ -4,7 +4,6 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_plotly_events import plotly_events
 
-from utils.analytics import track_page_visit
 from utils.clustering import preferred_strain_label
 from utils.page import init_page
 from utils.sample_helpers import (
@@ -215,7 +214,6 @@ def sync_sample_map_url(sample_id: int | None) -> None:
     if sample_id is not None:
         st.query_params["sample_id"] = str(int(sample_id))
         st.session_state["sample_map_last_query_sample_id"] = int(sample_id)
-    track_page_visit()
 
 
 def apply_query_sample_selection(raw: pd.DataFrame, selected_sample_id: int | None) -> None:
@@ -724,7 +722,7 @@ def render_sample_navigation_card(
 
 
 previous_page = st.session_state.get("active_page")
-init_page("Sample Map", "Sample Map", track_analytics=False)
+init_page("Sample Map", "Sample Map")
 apply_pending_navigation(previous_page)
 
 st.title("Sample Locations")

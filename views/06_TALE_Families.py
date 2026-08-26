@@ -22,13 +22,12 @@ from utils.fasta_export import (
 )
 from utils.family_alignment import aligned_rvd_counts, aligned_rvds
 from utils.tale_helpers import tale_selector_labels
-from utils.analytics import track_page_visit
 from utils.page import init_page, open_genome_organization
 from utils.theme import PSEUDO_TALE_GREY, SELECTED_ACCENT
 from utils.taxonomy import abbreviate_taxon_labels, resolved_taxon_labels
 from utils.tree import layout_tree, try_parse_newick
 
-init_page("TALE Families", "TALE Families", track_analytics=False)
+init_page("TALE Families", "TALE Families")
 st.title("TALE Families")
 
 INNER_SPACING = 38.0
@@ -336,7 +335,6 @@ def sync_family_url(family_name: str | None, tale_id: int | None) -> None:
         st.query_params["family"] = family_name
     if tale_id is not None:
         st.query_params["tale_id"] = str(int(tale_id))
-    track_page_visit()
 
 
 def queue_selection(family_name: str | None, tale_id: int | None) -> None:

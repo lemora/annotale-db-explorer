@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 
-from utils.analytics import track_page_visit
 from utils.sample_helpers import (
     build_sample_selector_rows,
     country_or_unknown,
@@ -97,7 +96,7 @@ def set_selected_sample(selector_rows: pd.DataFrame, sample_id: int) -> None:
 
 def sync_sample_picker(selector_rows: pd.DataFrame) -> None:
     set_selected_sample(selector_rows, st.session_state["sample_page_sample_id"])
-init_page("Sample", "Sample", track_analytics=False)
+init_page("Sample", "Sample")
 st.title("Sample")
 
 st.markdown(
@@ -236,7 +235,6 @@ if detail.empty:
     st.warning("No sample detail found.")
     st.stop()
 
-track_page_visit()
 
 row = detail.iloc[0]
 sample_name = sample_title(row)

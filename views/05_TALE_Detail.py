@@ -2,7 +2,6 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from utils.analytics import track_page_visit
 from utils.tale_queries import load_tale_detail, load_tale_options, load_tale_rvds
 from utils.tale_helpers import tale_selector_labels
 from utils.fasta_export import (
@@ -15,7 +14,7 @@ from utils.page import init_page, open_genome_organization
 from utils.taxonomy import resolved_taxon_labels
 from utils.theme import blue_card_dark_mode_css
 
-init_page("TALE Detail", "TALE Detail", track_analytics=False)
+init_page("TALE Detail", "TALE Detail")
 st.title("TALE Detail")
 
 
@@ -180,7 +179,6 @@ selected_tale_id = st.selectbox(
 )
 selected_tale_id = int(selected_tale_id)
 st.query_params["tale_id"] = str(selected_tale_id)
-track_page_visit()
 st.session_state["tale_detail_last_query_id"] = selected_tale_id
 
 detail = load_tale_detail(selected_tale_id)

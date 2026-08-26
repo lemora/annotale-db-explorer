@@ -4,12 +4,5 @@ services:
     restart: unless-stopped
     ports:
       - "8501:8501"
-    environment:
-      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
-      ANALYTICS_DB_PATH: ${ANALYTICS_DB_PATH:-/app/analytics/analytics.sqlite3}
-      ANALYTICS_IP_MODE: ${ANALYTICS_IP_MODE:-hash}
-      ANALYTICS_RETENTION_DAYS: ${ANALYTICS_RETENTION_DAYS:-30}
-      ANALYTICS_HASH_SALT: ${ANALYTICS_HASH_SALT:-change-me-in-production}
     volumes:
       - ./data:/app/data:ro
-      - ./analytics:/app/analytics

@@ -3,7 +3,6 @@ import pandas as pd
 import streamlit as st
 from urllib.parse import quote
 
-from utils.analytics import track_page_visit
 from utils.fasta_export import (
     build_multi_fasta,
     slugify_filename_part,
@@ -19,7 +18,7 @@ from utils.tale_queries import load_strain_tales, load_tale_detail
 from utils.taxonomy import abbreviate_taxon_labels, resolved_taxon_labels
 from utils.theme import SELECTED_ACCENT, blue_card_dark_mode_css
 
-init_page("Genome Organization", "Genome Organization", track_analytics=False)
+init_page("Genome Organization", "Genome Organization")
 st.title("TALE Genomic Organization")
 st.caption("TALE positions by replicon and strand, colored by family.")
 st.markdown(
@@ -309,7 +308,6 @@ def sync_genome_org_url(sample_id: int | None, tale_id: int | None) -> None:
         st.session_state["genome_org_last_seen_query_tale_id"] = int(tale_id)
     else:
         st.session_state["genome_org_last_seen_query_tale_id"] = None
-    track_page_visit()
 
 
 def clear_selected_tale() -> None:
