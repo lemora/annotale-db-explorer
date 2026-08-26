@@ -456,6 +456,7 @@ def render_map(
                 opacity=0.85,
             ),
             hovertemplate="%{text}<br>Samples: %{marker.color}<extra></extra>",
+            showlegend=False,
         )
     )
 
