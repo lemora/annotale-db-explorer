@@ -68,7 +68,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-DEFAULT_SAMPLE_ID = 4
+DEFAULT_SAMPLE_ID = 1
 BOX_HEIGHT = 18
 ESTIMATED_CHART_WIDTH_PX = 1600.0
 MIN_BOX_SVG_WIDTH = 14
