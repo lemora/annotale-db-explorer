@@ -265,7 +265,6 @@ with overview_left:
     st.subheader("Sequence Sizes")
     size_rows = pd.DataFrame(
         [
-            {"measure": "Genomic span", "length": genomic_length or 0, "label": f"{genomic_length:,} nt" if genomic_length is not None else "Unknown"},
             {"measure": "DNA sequence", "length": len(dna_seq), "label": f"{len(dna_seq):,} nt"},
             {"measure": "Protein sequence", "length": len(protein_seq), "label": f"{len(protein_seq):,} aa"},
         ]
@@ -277,28 +276,21 @@ with overview_left:
             x=alt.X("length:Q", title="Length"),
             y=alt.Y(
                 "measure:N",
-                sort=["Genomic span", "DNA sequence", "Protein sequence"],
+                sort=["DNA sequence", "Protein sequence"],
                 title=None,
             ),
             color=alt.Color(
                 "measure:N",
                 scale=alt.Scale(
-                    domain=["Genomic span", "DNA sequence", "Protein sequence"],
-                    range=["#6e8c47", "#b96a33", "#3f6f8b"],
+                    domain=["DNA sequence", "Protein sequence"],
+                    range=["#b96a33", "#3f6f8b"],
                 ),
                 legend=None,
             ),
             tooltip=["measure:N", "label:N"],
         )
     )
-    size_labels = (
-        alt.Chart(size_rows)
-        .mark_text(opacity=0)
-    )
     st.altair_chart(size_chart.properties(height=160), use_container_width=True)
-    if genomic_length is not None and dna_seq:
-        delta = genomic_length - len(dna_seq)
-        st.caption(f"Genomic span minus DNA sequence length: {delta:,} nt")
 
 with overview_right:
     st.subheader("Genomic Placement")
